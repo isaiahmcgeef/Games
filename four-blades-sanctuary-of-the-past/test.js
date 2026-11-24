@@ -425,7 +425,43 @@ assert(g.enemies.every((e) => e.biome === 'frost' && e.variant >= 0 && e.variant
 g.enterRoom('dw_start', { col: 10, row: 7 });
 assert(g.ambientMotes.length >= 15, 'Dark World twilight spores active');
 assert(g.enemies.every((e) => e.biome === 'darkworld'), 'Dark World enemies carry darkworld biome');
-console.log('[PASS] Hi-Bit 32x32 Graphics: 640x416 room cache, auto-invalidation, biome enemies & ambient weather');
+
+// Verify removing pots/bushes in Dark World leaves DARK_GRASS/DARK_PATH, never Light World green GRASS!
+const dwHero = g.humanHeroes[0];
+g.room.grid[4][4] = T.POT;
+dwHero.carrying = null;
+dwHero.dir = FB.DIRS.RIGHT;
+dwHero.x = 3 * 16 + 10;
+dwHero.y = 4 * 16 + 8;
+assert(g.handleHeroGrabOrThrow(dwHero) === true, 'Lifted pot in Dark World');
+assert(g.room.grid[4][4] === T.DARK_GRASS, `Expected DARK_GRASS under lifted Dark World pot, got ${g.room.grid[4][4]}`);
+dwHero.carrying = null;
+g.room.grid[4][5] = T.POT;
+g.explodeBomb({ x: 5 * 16 + 8, y: 4 * 16 + 8, damage: 5, owner: dwHero });
+assert(g.room.grid[4][5] === T.DARK_GRASS, `Expected DARK_GRASS under bombed Dark World pot, got ${g.room.grid[4][5]}`);
+
+// Verify both bosses summon minions and clear them on defeat!
+g.bossDefeated = false;
+g.frostBossDefeated = false;
+g.enterRoom('dg_boss', { col: 10, row: 10 });
+const vaalor = g.enemies.find((e) => e.type === 'boss');
+assert(vaalor && vaalor.maxHp >= 54, 'Vaalor buffed difficulty');
+vaalor.summonTimer = 0.05;
+g.updateEnemies(0.1);
+assert(g.enemies.some((e) => e.alive && e.isSummoned), 'Vaalor summoned minions during combat');
+g.onBossDefeated(vaalor);
+assert(!g.enemies.some((e) => e.alive && e.isSummoned), 'Vaalor defeat clears summoned minions');
+
+g.enterRoom('fs_boss', { col: 10, row: 10 });
+const glacior = g.enemies.find((e) => e.type === 'frost_boss');
+assert(glacior && glacior.maxHp >= 68, 'Glacior buffed difficulty');
+glacior.summonTimer = 0.05;
+g.updateEnemies(0.1);
+assert(g.enemies.some((e) => e.alive && e.isSummoned && e.biome === 'frost'), 'Glacior summoned Frost minions during combat');
+g.onFrostBossDefeated(glacior);
+assert(!g.enemies.some((e) => e.alive && e.isSummoned), 'Glacior defeat clears summoned minions');
+
+console.log('[PASS] Hi-Bit 32x32 Graphics, Dark World Pot Ground Fix & Boss Minion Summoning');
 
 // 11. Visit & render every room in the world at Hi-Bit 640x416
 for (const id of Object.keys(g.rooms)) {

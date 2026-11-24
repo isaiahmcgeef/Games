@@ -202,58 +202,61 @@
         type === 'stalfos' ||
         type === 'knight';
 
-      const scale = 1 + (playerCount - 1) * 0.35;
+      const scale = 1 + (playerCount - 1) * 0.4;
+      const biomeMult = biome === 'frost' ? 1.25 : biome === 'darkworld' ? 1.15 : 1.0;
+      this.isSummoned = false;
 
       switch (type) {
         case 'octorok':
-          this.maxHp = Math.round(3 * scale);
-          this.speed = 32;
-          this.damage = 1;
+          this.maxHp = Math.round(5 * scale * biomeMult);
+          this.speed = 42;
+          this.damage = 2;
           this.rupeeDrop = 'rupee_green';
           break;
         case 'soldier':
-          this.maxHp = Math.round(5 * scale);
-          this.speed = 38;
-          this.damage = 2;
-          this.rupeeDrop = 'rupee_blue';
-          break;
-        case 'red_soldier':
-          this.maxHp = Math.round(7 * scale);
+          this.maxHp = Math.round(8 * scale * biomeMult);
           this.speed = 48;
           this.damage = 2;
           this.rupeeDrop = 'rupee_blue';
           break;
+        case 'red_soldier':
+          this.maxHp = Math.round(11 * scale * biomeMult);
+          this.speed = 58;
+          this.damage = 3;
+          this.rupeeDrop = 'rupee_blue';
+          break;
         case 'keese':
-          this.maxHp = Math.round(2 * scale);
-          this.speed = 54;
-          this.damage = 1;
+          this.maxHp = Math.round(4 * scale * biomeMult);
+          this.speed = 66;
+          this.damage = 2;
           this.flying = true;
           this.rupeeDrop = 'rupee_green';
           break;
         case 'stalfos':
-          this.maxHp = Math.round(6 * scale);
-          this.speed = 44;
-          this.damage = 2;
+          this.maxHp = Math.round(9 * scale * biomeMult);
+          this.speed = 54;
+          this.damage = 3;
           this.rupeeDrop = 'rupee_blue';
           break;
         case 'knight':
           this.w = 18;
           this.h = 18;
-          this.maxHp = Math.round(12 * scale);
-          this.speed = 34;
-          this.damage = 3;
+          this.maxHp = Math.round(18 * scale * biomeMult);
+          this.speed = 44;
+          this.damage = 4;
           this.rupeeDrop = 'rupee_red';
           break;
         case 'boss':
           this.w = 30;
           this.h = 30;
-          this.maxHp = Math.round(34 * scale);
-          this.speed = 44;
-          this.damage = 2;
+          this.maxHp = Math.round(54 * scale);
+          this.speed = 54;
+          this.damage = 3;
           this.flying = true;
           this.phase = 1;
           this.bossState = 'orbit';
-          this.stateTimer = 2.4;
+          this.stateTimer = 1.8;
+          this.summonTimer = 4.2;
           this.lookAngle = Math.PI / 2;
           this.dashVx = 0;
           this.dashVy = 0;
@@ -261,19 +264,20 @@
             angle: (i * Math.PI) / 2,
             radius: 30,
             alive: true,
-            hp: 3,
+            hp: 4,
           }));
           break;
         case 'frost_boss':
           this.w = 28;
           this.h = 28;
-          this.maxHp = Math.round(42 * scale);
-          this.speed = 50;
-          this.damage = 2;
+          this.maxHp = Math.round(68 * scale);
+          this.speed = 60;
+          this.damage = 3;
           this.flying = true;
           this.phase = 1;
           this.bossState = 'weave';
-          this.stateTimer = 2.0;
+          this.stateTimer = 1.65;
+          this.summonTimer = 4.0;
           this.lookAngle = Math.PI / 2;
           this.dashVx = 0;
           this.dashVy = 0;
@@ -285,9 +289,9 @@
           }));
           break;
         default:
-          this.maxHp = 4;
-          this.speed = 36;
-          this.damage = 1;
+          this.maxHp = 6;
+          this.speed = 44;
+          this.damage = 2;
           this.rupeeDrop = 'rupee_green';
       }
 
@@ -327,31 +331,33 @@
 
       const isAnyBoss = this.type === 'boss' || this.type === 'frost_boss';
       const angle = Math.atan2(this.y - srcY, this.x - srcX);
-      const kb = isAnyBoss ? 45 : this.type === 'knight' ? 85 : 155;
+      const kb = isAnyBoss ? 40 : this.type === 'knight' ? 75 : 145;
       this.knockX = Math.cos(angle) * kb;
       this.knockY = Math.sin(angle) * kb;
-      this.knockTimer = isAnyBoss ? 0.08 : 0.16;
+      this.knockTimer = isAnyBoss ? 0.07 : 0.14;
 
       FB.audio.play('hit');
       game.hitstop = Math.max(game.hitstop, 0.032);
       game.spawnParticles(this.x, this.y, this.type === 'frost_boss' ? '#7dd3fc' : '#fde047', 6);
 
-      // Boss phase 2 transitions
+      // Boss phase 2 transitions (respawn shield orbs & summon reinforcements immediately!)
       if (this.type === 'boss' && this.phase === 1 && this.hp <= this.maxHp * 0.5 && this.hp > 0) {
         this.phase = 2;
+        this.summonTimer = 0.4;
         FB.audio.play('bossRoar');
-        game.screenShake = 6;
+        game.screenShake = 7;
         game.showToast('Shadow Wraith Vaalor enters Phase II — Fury of the Four Seals!');
-        // Respawn 2 fast orbs
+        // Respawn 3 fast orbs
         this.orbs.forEach((o, i) => {
-          o.alive = i % 2 === 0;
-          o.hp = 3;
+          o.alive = i < 3;
+          o.hp = 4;
           o.radius = 34;
         });
       } else if (this.type === 'frost_boss' && this.phase === 1 && this.hp <= this.maxHp * 0.5 && this.hp > 0) {
         this.phase = 2;
+        this.summonTimer = 0.4;
         FB.audio.play('bossRoar');
-        game.screenShake = 7;
+        game.screenShake = 8;
         game.spawnRing(this.x, this.y, '#38bdf8', 36, 0.38);
         game.showToast('Frost Sovereign Glacior enters Phase II — Eternal Blizzard!');
       }

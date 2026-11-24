@@ -200,8 +200,8 @@
         }
         for (const key of room.destroyedTiles) {
           const [cc, rr] = key.split(',').map(Number);
-          if (room.grid[rr]?.[cc] === T.CRACKED_WALL) room.grid[rr][cc] = T.DUNGEON_FLOOR;
-          if (room.grid[rr]?.[cc] === T.ROCK_CRACKED) room.grid[rr][cc] = T.PATH;
+          if (room.grid[rr]?.[cc] === T.CRACKED_WALL) room.grid[rr][cc] = this._floorTileForRoom(room, cc, rr, false);
+          if (room.grid[rr]?.[cc] === T.ROCK_CRACKED) room.grid[rr][cc] = this._floorTileForRoom(room, cc, rr, true);
         }
       }
 
@@ -474,6 +474,31 @@
 
     _openDoorTiles(room, dir) {
       this._setDoorTiles(room, dir, T.DOOR_OPEN);
+    }
+
+    _floorTileForRoom(room, col, row, isPath = false) {
+      if (!room) return isPath ? T.PATH : T.GRASS;
+      const area = room.area || 'overworld';
+      const grid = room.grid;
+      const countAdj = (tileId) => {
+        let n = 0;
+        if (grid[row - 1]?.[col] === tileId) n++;
+        if (grid[row + 1]?.[col] === tileId) n++;
+        if (grid[row]?.[col - 1] === tileId) n++;
+        if (grid[row]?.[col + 1] === tileId) n++;
+        return n;
+      };
+      if (area === 'darkworld') {
+        if (isPath || countAdj(T.DARK_PATH) >= 2) return T.DARK_PATH;
+        return T.DARK_GRASS;
+      }
+      if (area === 'shop' || room.id === 'ow_shop') return T.SHOP_FLOOR;
+      if (area === 'frost') {
+        return countAdj(T.ICE_FLOOR) >= 2 ? T.ICE_FLOOR : T.DUNGEON_FLOOR;
+      }
+      if (area === 'dungeon') return T.DUNGEON_FLOOR;
+      if (isPath || countAdj(T.PATH) >= 2) return T.PATH;
+      return T.GRASS;
     }
 
     spawnPickup(kind, x, y, extra) {
@@ -1123,12 +1148,7 @@
       const pr = Math.floor((hero.y + dv.y * 13) / TS);
       if (pc >= 0 && pc < FB.ROOM_COLS && pr >= 0 && pr < FB.ROOM_ROWS) {
         if (this.room.grid[pr][pc] === T.POT) {
-          this.room.grid[pr][pc] =
-            this.room.area === 'dungeon' || this.room.area === 'frost'
-              ? T.DUNGEON_FLOOR
-              : this.room.id === 'ow_shop'
-                ? T.SHOP_FLOOR
-                : T.GRASS;
+          this.room.grid[pr][pc] = this._floorTileForRoom(this.room, pc, pr, false);
           hero.carrying = { kind: 'pot', ref: null };
           FB.audio.play('lift');
           return true;
@@ -1814,13 +1834,14 @@
           if (Math.hypot(tx - cx, ty - cy) > reach + 4) continue;
 
           if (tile === T.BUSH) {
-            this.room.grid[r][c] = T.GRASS;
+            this.room.grid[r][c] = this._floorTileForRoom(this.room, c, r, false);
             FB.audio.play('bush');
-            this.spawnParticles(tx, ty, '#4ade80', 7, 52, { shape: 'leaf', gravity: 55, life: 0.42 });
-            this.spawnParticles(tx, ty, '#16a34a', 4, 42, { shape: 'leaf', gravity: 50, life: 0.4 });
+            const isDark = this.room.area === 'darkworld';
+            this.spawnParticles(tx, ty, isDark ? '#a855f7' : '#4ade80', 7, 52, { shape: 'leaf', gravity: 55, life: 0.42 });
+            this.spawnParticles(tx, ty, isDark ? '#6b21a8' : '#16a34a', 4, 42, { shape: 'leaf', gravity: 50, life: 0.4 });
             this._dropDestructibleLoot(tx, ty, false);
           } else if (tile === T.POT) {
-            this.room.grid[r][c] = this.room.area === 'dungeon' ? T.DUNGEON_FLOOR : T.GRASS;
+            this.room.grid[r][c] = this._floorTileForRoom(this.room, c, r, false);
             FB.audio.play('pot');
             this.spawnParticles(tx, ty, '#d49461', 7, 68, { shape: 'spark', gravity: 140, life: 0.36 });
             this.spawnParticles(tx, ty, '#8c4f23', 5, 55, { shape: 'square', gravity: 130, life: 0.32 });
@@ -2078,37 +2099,41 @@
       if (e.type === 'octorok') {
         if (e.aiTimer <= 0) {
           e.dir = Math.floor(Math.random() * 4);
-          e.aiTimer = (1.1 + Math.random() * 1.0) * hmCadence;
+          e.aiTimer = (0.85 + Math.random() * 0.85) * hmCadence;
         }
         const dv = FB.DIR_VEC[e.dir];
         if (!this.moveEnemy(e, dv.x * e.speed * hmSpd * dt, dv.y * e.speed * hmSpd * dt)) {
           e.dir = (e.dir + 1) % 4;
         }
-        if (e.shootTimer <= 0 && dist < 170) {
-          e.shootTimer = (2.0 + Math.random() * 1.1) * hmCadence;
-          // Face nearest axis toward player and spit rock
+        if (e.shootTimer <= 0 && dist < 195) {
+          e.shootTimer = (1.35 + Math.random() * 0.75) * hmCadence;
+          // Face nearest axis toward player and spit rock (3-way spread in Dark World!)
           if (Math.abs(target.x - e.x) > Math.abs(target.y - e.y)) {
             e.dir = target.x < e.x ? FB.DIRS.LEFT : FB.DIRS.RIGHT;
           } else {
             e.dir = target.y < e.y ? FB.DIRS.UP : FB.DIRS.DOWN;
           }
           const sv = FB.DIR_VEC[e.dir];
-          this.projectiles.push(
-            new FB.Projectile({
-              kind: 'rock',
-              x: e.x + sv.x * 8,
-              y: e.y + sv.y * 8,
-              vx: sv.x * 115 * hmSpd,
-              vy: sv.y * 115 * hmSpd,
-              fromEnemy: true,
-              damage: 1,
-              life: 1.8,
-              radius: 4,
-            })
-          );
+          const baseAng = Math.atan2(sv.y, sv.x);
+          const angles = e.biome === 'darkworld' ? [baseAng - 0.24, baseAng, baseAng + 0.24] : [baseAng];
+          for (const a of angles) {
+            this.projectiles.push(
+              new FB.Projectile({
+                kind: 'rock',
+                x: e.x + Math.cos(a) * 8,
+                y: e.y + Math.sin(a) * 8,
+                vx: Math.cos(a) * 142 * hmSpd,
+                vy: Math.sin(a) * 142 * hmSpd,
+                fromEnemy: true,
+                damage: 2,
+                life: 1.9,
+                radius: 4,
+              })
+            );
+          }
         }
       } else if (e.type === 'keese') {
-        const ang = Math.atan2(target.y - e.y, target.x - e.x) + Math.sin(this.time * 5 + e.x) * 0.8;
+        const ang = Math.atan2(target.y - e.y, target.x - e.x) + Math.sin(this.time * 6.5 + e.x) * 0.75;
         this.moveEnemy(e, Math.cos(ang) * e.speed * hmSpd * dt, Math.sin(ang) * e.speed * hmSpd * dt);
       } else {
         // Armed melee enemies (Soldier, Red Soldier, Stalfos, Armored Knight):
@@ -2122,8 +2147,9 @@
             e.dir = Math.sin(ang) < 0 ? FB.DIRS.UP : FB.DIRS.DOWN;
           }
           if (e.telegraphTimer <= 0) {
-            e.lungeTimer = 0.2;
-            e.attackCooldown = (e.type === 'red_soldier' ? 1.15 : 1.45) * hmCadence;
+            e.lungeTimer = 0.22;
+            e.attackCooldown =
+              (e.type === 'red_soldier' ? 0.85 : e.type === 'knight' ? 0.98 : 1.08) * hmCadence;
             FB.audio.play('sword');
           }
           return;
@@ -2132,12 +2158,12 @@
         if (e.armed && e.lungeTimer > 0) {
           e.lungeTimer -= dt;
           const dv = FB.DIR_VEC[e.dir] || FB.DIR_VEC[0];
-          const lungeSpd = e.speed * 2.15 * hmSpd;
+          const lungeSpd = e.speed * 2.3 * hmSpd;
           this.moveEnemy(e, dv.x * lungeSpd * dt, dv.y * lungeSpd * dt);
           return;
         }
 
-        if (dist < 135) {
+        if (dist < 168) {
           const ang = Math.atan2(target.y - e.y, target.x - e.x);
           const vx = Math.cos(ang) * e.speed * hmSpd;
           const vy = Math.sin(ang) * e.speed * hmSpd;
@@ -2148,26 +2174,26 @@
           }
 
           // Initiate parryable weapon telegraph when close!
-          if (e.armed && dist < 38 && e.attackCooldown <= 0) {
-            e.telegraphTimer = 0.36 * hmCadence;
+          if (e.armed && dist < 44 && e.attackCooldown <= 0) {
+            e.telegraphTimer = 0.30 * hmCadence;
             return;
           }
 
           this.moveEnemy(e, vx * dt, vy * dt);
 
-          // Stalfos throws bones at mid-range!
-          if (e.type === 'stalfos' && dist > 42 && e.shootTimer <= 0) {
-            e.shootTimer = 2.4 * hmCadence;
+          // Stalfos throws fast bones at mid-range!
+          if (e.type === 'stalfos' && dist > 38 && e.shootTimer <= 0) {
+            e.shootTimer = 1.65 * hmCadence;
             this.projectiles.push(
               new FB.Projectile({
                 kind: 'bone',
                 x: e.x,
                 y: e.y,
-                vx: Math.cos(ang) * 115 * hmSpd,
-                vy: Math.sin(ang) * 115 * hmSpd,
+                vx: Math.cos(ang) * 140 * hmSpd,
+                vy: Math.sin(ang) * 140 * hmSpd,
                 fromEnemy: true,
                 damage: 2,
-                life: 1.6,
+                life: 1.8,
                 radius: 4,
               })
             );
@@ -2175,19 +2201,67 @@
         } else {
           if (e.aiTimer <= 0) {
             e.dir = Math.floor(Math.random() * 4);
-            e.aiTimer = 1.2 + Math.random();
+            e.aiTimer = 1.0 + Math.random() * 0.8;
           }
           const dv = FB.DIR_VEC[e.dir];
-          if (!this.moveEnemy(e, dv.x * e.speed * 0.6 * hmSpd * dt, dv.y * e.speed * 0.6 * hmSpd * dt)) {
+          if (!this.moveEnemy(e, dv.x * e.speed * 0.72 * hmSpd * dt, dv.y * e.speed * 0.72 * hmSpd * dt)) {
             e.dir = (e.dir + 2) % 4;
           }
         }
       }
     }
 
+    summonBossMinions(boss) {
+      const activeMinions = this.enemies.filter((m) => m.alive && m.isSummoned).length;
+      const maxMinions = boss.phase === 2 ? 4 : 3;
+      if (activeMinions >= maxMinions) return 0;
+
+      const isFrost = boss.type === 'frost_boss';
+      const slots = Math.min(boss.phase === 2 ? 2 : 1, maxMinions - activeMinions);
+      const biome = isFrost ? 'frost' : 'dungeon';
+      let spawned = 0;
+
+      for (let i = 0; i < slots; i++) {
+        const ang = (boss.lookAngle || 0) + (i === 0 ? 1.15 : -1.15) + (Math.random() - 0.5) * 0.5;
+        const sx = Math.max(TS * 2.5, Math.min(FB.VIEW_W - TS * 2.5, boss.x + Math.cos(ang) * 34));
+        const sy = Math.max(TS * 2.5, Math.min(FB.VIEW_H - TS * 2.5, boss.y + Math.sin(ang) * 34));
+
+        let mType = 'keese';
+        if (boss.phase === 2) {
+          if (isFrost) mType = i === 0 ? 'stalfos' : 'red_soldier';
+          else mType = i === 0 ? 'stalfos' : 'keese';
+        } else if (isFrost && Math.random() < 0.45) {
+          mType = 'stalfos';
+        }
+
+        const minion = new FB.Enemy(mType, sx, sy, this.humanHeroes.length, biome);
+        minion.isSummoned = true;
+        minion.maxHp = Math.max(3, Math.round(minion.maxHp * 0.75));
+        minion.hp = minion.maxHp;
+        this.enemies.push(minion);
+        spawned++;
+
+        const ringColor = isFrost ? '#38bdf8' : '#a855f7';
+        this.spawnRing(sx, sy, ringColor, 20, 0.28);
+        this.spawnParticles(sx, sy, isFrost ? '#bae6fd' : '#e9d5ff', 10, 65, { shape: 'star' });
+      }
+
+      if (spawned > 0) {
+        FB.audio.play('mirror');
+        this.addFloatingText(
+          boss.x,
+          boss.y - 18,
+          isFrost ? 'FROST GUARD!' : 'SUMMON!',
+          isFrost ? '#7dd3fc' : '#d8b4fe'
+        );
+      }
+      return spawned;
+    }
+
     updateBoss(b, target, dt) {
+      const hmMult = this.heroMode ? 1.15 : 1.0;
       b.lookAngle = Math.atan2(target.y - b.y, target.x - b.x);
-      const orbSpeed = b.phase === 2 ? 2.6 : 1.7;
+      const orbSpeed = (b.phase === 2 ? 3.2 : 2.1) * hmMult;
       for (const orb of b.orbs) {
         if (!orb.alive) continue;
         orb.angle += orbSpeed * dt;
@@ -2195,42 +2269,50 @@
         const oy = b.y + Math.sin(orb.angle) * orb.radius;
         for (const h of this.humanHeroes) {
           if (!h.downed && Math.hypot(h.x - ox, h.y - oy) < 11) {
-            h.damage(1, ox, oy, this);
+            h.damage(2, ox, oy, this);
           }
         }
       }
 
+      // Periodically summon Shadow Keese & Stalfos minions!
+      b.summonTimer = (b.summonTimer !== undefined ? b.summonTimer : 4.5) - dt;
+      if (b.summonTimer <= 0) {
+        this.summonBossMinions(b);
+        b.summonTimer = b.phase === 2 ? 4.4 : 5.6;
+      }
+
       b.stateTimer -= dt;
       if (b.bossState === 'orbit') {
-        // Glide smoothly toward arena center / circling player
-        const ang = Math.atan2(target.y - b.y, target.x - b.x) + 0.6;
-        const spd = b.phase === 2 ? 52 : 36;
+        // Glide rapidly circling player
+        const ang = Math.atan2(target.y - b.y, target.x - b.x) + 0.55;
+        const spd = (b.phase === 2 ? 66 : 48) * hmMult;
         b.x = Math.max(TS * 2.5, Math.min(FB.VIEW_W - TS * 2.5, b.x + Math.cos(ang) * spd * dt));
         b.y = Math.max(TS * 2.5, Math.min(FB.VIEW_H - TS * 2.5, b.y + Math.sin(ang) * spd * dt));
 
         if (b.stateTimer <= 0) {
           // Fire radial dark energy spread!
-          const count = b.phase === 2 ? 6 : 4;
+          const count = b.phase === 2 ? 8 : 5;
           for (let i = 0; i < count; i++) {
-            const a = b.lookAngle + ((i - (count - 1) / 2) * 0.36);
+            const a = b.lookAngle + (i - (count - 1) / 2) * 0.32;
+            const orbSpd = (b.phase === 2 ? 138 : 112) * hmMult;
             this.projectiles.push(
               new FB.Projectile({
                 kind: 'dark_orb',
                 x: b.x,
                 y: b.y,
-                vx: Math.cos(a) * (b.phase === 2 ? 118 : 95),
-                vy: Math.sin(a) * (b.phase === 2 ? 118 : 95),
+                vx: Math.cos(a) * orbSpd,
+                vy: Math.sin(a) * orbSpd,
                 fromEnemy: true,
                 damage: 2,
-                life: 2.2,
+                life: 2.3,
                 radius: 5,
               })
             );
           }
           FB.audio.play('fire');
           b.bossState = 'dash';
-          b.stateTimer = 0.85;
-          const dashSpd = b.phase === 2 ? 128 : 96;
+          b.stateTimer = 0.78;
+          const dashSpd = (b.phase === 2 ? 152 : 118) * hmMult;
           b.dashVx = Math.cos(b.lookAngle) * dashSpd;
           b.dashVy = Math.sin(b.lookAngle) * dashSpd;
         }
@@ -2239,7 +2321,7 @@
         b.y = Math.max(TS * 2.2, Math.min(FB.VIEW_H - TS * 2.2, b.y + b.dashVy * dt));
         if (b.stateTimer <= 0) {
           b.bossState = 'orbit';
-          b.stateTimer = b.phase === 2 ? 1.6 : 2.3;
+          b.stateTimer = b.phase === 2 ? 1.25 : 1.75;
         }
       }
     }
@@ -2247,22 +2329,30 @@
     updateFrostBoss(b, target, dt) {
       const hmMult = this.heroMode ? 1.15 : 1.0;
       b.lookAngle = Math.atan2(target.y - b.y, target.x - b.x);
-      b.weavePhase = (b.weavePhase || 0) + dt * (b.phase === 2 ? 3.8 : 2.5);
+      b.weavePhase = (b.weavePhase || 0) + dt * (b.phase === 2 ? 4.3 : 2.9);
+
+      // Periodically summon Frost Spire minions (Frost Keese, Frost Stalfos, Frost Soldiers)!
+      b.summonTimer = (b.summonTimer !== undefined ? b.summonTimer : 4.2) - dt;
+      if (b.summonTimer <= 0) {
+        this.summonBossMinions(b);
+        b.summonTimer = b.phase === 2 ? 4.2 : 5.4;
+      }
+
       b.stateTimer -= dt;
 
       if (b.bossState === 'weave') {
         // Serpentine glide across the glacial crown
-        const baseAng = b.lookAngle + Math.sin(b.weavePhase) * 0.85;
-        const spd = (b.phase === 2 ? 68 : 48) * hmMult;
+        const baseAng = b.lookAngle + Math.sin(b.weavePhase) * 0.82;
+        const spd = (b.phase === 2 ? 82 : 58) * hmMult;
         b.x = Math.max(TS * 2.2, Math.min(FB.VIEW_W - TS * 2.2, b.x + Math.cos(baseAng) * spd * dt));
         b.y = Math.max(TS * 2.2, Math.min(FB.VIEW_H - TS * 2.2, b.y + Math.sin(baseAng) * spd * dt));
 
         if (b.stateTimer <= 0) {
-          // Fire aimed spread of reflectable Ice Shards, then telegraph a frost charge!
-          const count = b.phase === 2 ? 5 : 3;
+          // Fire wider spread of reflectable Ice Shards, then telegraph a frost charge!
+          const count = b.phase === 2 ? 7 : 5;
           for (let i = 0; i < count; i++) {
-            const a = b.lookAngle + (i - (count - 1) / 2) * 0.34;
-            const shardSpd = (b.phase === 2 ? 132 : 108) * hmMult;
+            const a = b.lookAngle + (i - (count - 1) / 2) * 0.28;
+            const shardSpd = (b.phase === 2 ? 152 : 124) * hmMult;
             this.projectiles.push(
               new FB.Projectile({
                 kind: 'ice_shard',
@@ -2272,21 +2362,21 @@
                 vy: Math.sin(a) * shardSpd,
                 fromEnemy: true,
                 damage: 2,
-                life: 2.2,
+                life: 2.3,
                 radius: 4.5,
               })
             );
           }
           FB.audio.play('fire');
           b.bossState = 'telegraph';
-          b.stateTimer = b.phase === 2 ? 0.42 : 0.52;
+          b.stateTimer = b.phase === 2 ? 0.36 : 0.45;
         }
       } else if (b.bossState === 'telegraph') {
         // Lock onto player with golden glare before lunging!
         if (b.stateTimer <= 0) {
           b.bossState = 'charge';
           b.stateTimer = 0.72;
-          const chargeSpd = (b.phase === 2 ? 175 : 142) * hmMult;
+          const chargeSpd = (b.phase === 2 ? 202 : 162) * hmMult;
           b.dashVx = Math.cos(b.lookAngle) * chargeSpd;
           b.dashVy = Math.sin(b.lookAngle) * chargeSpd;
           FB.audio.play('dash');
@@ -2299,28 +2389,28 @@
           this.spawnParticles(b.x, b.y, '#bae6fd', 1, 24, { shape: 'dust', life: 0.22, size: 2.4 });
         }
         if (b.stateTimer <= 0) {
-          // Phase II radial 8-way blizzard shard burst!
+          // Phase II radial 10-way blizzard shard burst!
           if (b.phase === 2) {
-            for (let i = 0; i < 8; i++) {
-              const a = (i * Math.PI) / 4 + b.weavePhase * 0.25;
+            for (let i = 0; i < 10; i++) {
+              const a = (i * Math.PI * 2) / 10 + b.weavePhase * 0.25;
               this.projectiles.push(
                 new FB.Projectile({
                   kind: 'ice_shard',
                   x: b.x,
                   y: b.y,
-                  vx: Math.cos(a) * 115 * hmMult,
-                  vy: Math.sin(a) * 115 * hmMult,
+                  vx: Math.cos(a) * 130 * hmMult,
+                  vy: Math.sin(a) * 130 * hmMult,
                   fromEnemy: true,
                   damage: 2,
-                  life: 2.0,
+                  life: 2.1,
                   radius: 4.5,
                 })
               );
             }
-            this.spawnRing(b.x, b.y, '#38bdf8', 32, 0.3);
+            this.spawnRing(b.x, b.y, '#38bdf8', 34, 0.3);
           }
           b.bossState = 'weave';
-          b.stateTimer = b.phase === 2 ? 1.55 : 2.1;
+          b.stateTimer = b.phase === 2 ? 1.2 : 1.65;
         }
       }
 
@@ -2343,8 +2433,18 @@
       }
     }
 
+    _clearSummonedMinions(color = '#e9d5ff') {
+      for (const m of this.enemies) {
+        if (m.alive && m.isSummoned) {
+          m.alive = false;
+          this.spawnParticles(m.x, m.y, color, 10, 75, { shape: 'star' });
+        }
+      }
+    }
+
     onBossDefeated(boss) {
       this.bossDefeated = true;
+      this._clearSummonedMinions('#d8b4fe');
       this.screenShake = 8;
       FB.audio.play('victory');
       this.spawnParticles(boss.x, boss.y, '#fde047', 28, 110);
@@ -2361,6 +2461,7 @@
 
     onFrostBossDefeated(boss) {
       this.frostBossDefeated = true;
+      this._clearSummonedMinions('#bae6fd');
       this.screenShake = 9;
       FB.audio.play('victory');
       this.spawnRing(boss.x, boss.y, '#38bdf8', 42, 0.45);
@@ -2793,18 +2894,18 @@
           if (Math.hypot(tx - bomb.x, ty - bomb.y) > blastRadius) continue;
           const tile = this.room.grid[r][c];
           if (tile === T.CRACKED_WALL) {
-            this.room.grid[r][c] = T.DUNGEON_FLOOR;
+            this.room.grid[r][c] = this._floorTileForRoom(this.room, c, r, false);
             this.room.destroyedTiles.add(`${c},${r}`);
             discoveredSecret = true;
           } else if (tile === T.ROCK_CRACKED) {
-            this.room.grid[r][c] = T.PATH;
+            this.room.grid[r][c] = this._floorTileForRoom(this.room, c, r, true);
             this.room.destroyedTiles.add(`${c},${r}`);
             discoveredSecret = true;
           } else if (tile === T.BUSH) {
-            this.room.grid[r][c] = T.GRASS;
+            this.room.grid[r][c] = this._floorTileForRoom(this.room, c, r, false);
             this._dropDestructibleLoot(tx, ty, false);
           } else if (tile === T.POT) {
-            this.room.grid[r][c] = this.room.area === 'dungeon' ? T.DUNGEON_FLOOR : T.GRASS;
+            this.room.grid[r][c] = this._floorTileForRoom(this.room, c, r, false);
             this._dropDestructibleLoot(tx, ty, !!this.room.fairyPots);
           } else if (tile === T.CRYSTAL_BLUE || tile === T.CRYSTAL_RED) {
             this.flipCrystalSwitch();
