@@ -22,8 +22,9 @@
             <span id="hud-boss-key" class="boss-key-badge">BOSS KEY —</span>
           </div>
         </div>
-        <canvas id="minimap-canvas" width="94" height="58" aria-label="Area Minimap"></canvas>
+        <canvas id="minimap-canvas" width="94" height="58" aria-label="Area Minimap" title="Open World Map &amp; Quest Journal (M)"></canvas>
         <div class="hud-controls">
+          <button id="btn-map" class="hud-btn" type="button" title="World Map &amp; Quest Journal (M)">MAP</button>
           <button id="btn-pause" class="hud-btn" type="button">PAUSE</button>
           <button id="btn-music" class="hud-btn" type="button">BGM: ON</button>
           <button id="btn-mute" class="hud-btn" type="button">SFX: ON</button>
@@ -43,6 +44,12 @@
         </div>
       </div>
 
+      <!-- Zelda-Style Dramatic Boss Intro Title Card -->
+      <div id="boss-intro-card" class="boss-intro-card hidden" aria-live="assertive">
+        <div id="boss-intro-sub" class="boss-intro-sub">SHADOW WRAITH</div>
+        <div id="boss-intro-title" class="boss-intro-title">VAALOR</div>
+      </div>
+
       <!-- Non-blocking Toast Banner -->
       <div id="toast-banner" class="toast-banner hidden"></div>
 
@@ -50,6 +57,31 @@
       <div id="dialog-box" class="dialog-box hidden" role="dialog" aria-live="polite">
         <div id="dialog-text" class="dialog-text"></div>
         <div class="dialog-continue">Press Attack / Space to continue ▼</div>
+      </div>
+
+      <!-- World Map & Quest Journal Drawer (M / I / Minimap Click — Display Only) -->
+      <div id="map-overlay" class="overlay hidden" role="dialog" aria-label="World Map and Quest Journal">
+        <div class="overlay-card map-card">
+          <div class="map-header">
+            <div>
+              <h2 class="map-title">WORLD MAP &amp; QUEST JOURNAL</h2>
+              <div id="map-area-subtitle" class="map-subtitle">Sanctuary Realm — Press M or Esc to close</div>
+            </div>
+            <button id="btn-close-map" type="button" class="hud-btn">CLOSE [M]</button>
+          </div>
+          <div class="map-body">
+            <div class="map-canvas-wrap">
+              <canvas id="worldmap-canvas" width="340" height="240"></canvas>
+              <div class="map-legend">
+                <span><i class="lg-dot" style="background:#facc15"></i> You</span>
+                <span><i class="lg-dot" style="background:#38bdf8"></i> Village</span>
+                <span><i class="lg-dot" style="background:#f59e0b"></i> Chest</span>
+                <span><i class="lg-dot" style="background:#ef4444"></i> Boss</span>
+              </div>
+            </div>
+            <div id="map-journal" class="map-journal"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Title & Optional Local Multiplayer Lobby -->

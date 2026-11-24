@@ -738,13 +738,181 @@ body {
   color: #ffffff;
 }
 
+/* Clickable Minimap */
+#minimap-canvas {
+  cursor: pointer;
+  transition: box-shadow 0.14s ease, border-color 0.14s ease;
+}
+#minimap-canvas:hover {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.35);
+}
+
+/* Dramatic Zelda-Style Boss Intro Title Card */
+.boss-intro-card {
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  pointer-events: none;
+  text-align: center;
+  padding: 12px 32px;
+  min-width: 280px;
+  background: linear-gradient(90deg, rgba(10, 12, 22, 0) 0%, rgba(14, 10, 24, 0.92) 18%, rgba(14, 10, 24, 0.92) 82%, rgba(10, 12, 22, 0) 100%);
+  border-top: 2px solid var(--gold);
+  border-bottom: 2px solid var(--gold);
+  animation: bossCardFade 2.2s ease-out forwards;
+}
+
+.boss-intro-sub {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  color: #fca5a5;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.boss-intro-title {
+  font-size: clamp(20px, 3vw, 30px);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: var(--gold-bright);
+  text-shadow: 0 3px 0 #3f1d0b, 0 0 18px rgba(250, 204, 21, 0.45);
+}
+
+@keyframes bossCardFade {
+  0% { opacity: 0; transform: translate(-50%, -58%) scale(0.94); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  82% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -46%) scale(1.02); }
+}
+
+/* World Map & Quest Journal Drawer */
+.map-card {
+  max-width: 680px;
+  width: 94%;
+  text-align: left;
+  padding: 14px 16px;
+}
+
+.map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(229, 190, 83, 0.28);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.map-title {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--gold-bright);
+  margin: 0;
+}
+
+.map-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.map-body {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.map-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#worldmap-canvas {
+  width: 100%;
+  height: auto;
+  background: #0b101b;
+  border: 1.5px solid rgba(229, 190, 83, 0.35);
+  border-radius: 7px;
+  image-rendering: pixelated;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.lg-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.map-journal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.journal-section {
+  background: rgba(9, 14, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+
+.journal-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: var(--gold-bright);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.medallion-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+
+.medallion-pill {
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(30, 41, 59, 0.65);
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+.medallion-pill.earned {
+  background: rgba(34, 84, 61, 0.75);
+  color: #fef08a;
+  border-color: rgba(250, 204, 21, 0.55);
+}
+
 .hidden {
   display: none !important;
 }
 
 @media (max-width: 760px) {
   .controls-grid,
-  .save-slots-row {
+  .save-slots-row,
+  .map-body {
     grid-template-columns: 1fr;
   }
   .mode-selector {

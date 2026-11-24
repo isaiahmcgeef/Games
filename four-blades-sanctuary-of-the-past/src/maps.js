@@ -64,11 +64,13 @@
   };
 
   FB.parseGrid = function parseGrid(rows) {
+    const rowCount = rows.length || FB.ROOM_ROWS;
+    const colCount = (rows[0] && rows[0].length) || FB.ROOM_COLS;
     const grid = [];
-    for (let r = 0; r < FB.ROOM_ROWS; r++) {
+    for (let r = 0; r < rowCount; r++) {
       const line = rows[r] || '';
       const row = [];
-      for (let c = 0; c < FB.ROOM_COLS; c++) {
+      for (let c = 0; c < colCount; c++) {
         const ch = line[c] || '.';
         const tile = FB.CHAR_TO_TILE[ch];
         row.push(tile !== undefined ? tile : T.GRASS);
@@ -93,6 +95,10 @@
 
     for (const id of Object.keys(rooms)) {
       const r = rooms[id];
+      r.rows = r.grid.length;
+      r.cols = r.grid[0] ? r.grid[0].length : FB.ROOM_COLS;
+      r.width = r.cols * FB.TILE_SIZE;
+      r.height = r.rows * FB.TILE_SIZE;
       r.visited = id === 'ow_start';
       r.cleared = false;
       r.puzzleSolved = false;

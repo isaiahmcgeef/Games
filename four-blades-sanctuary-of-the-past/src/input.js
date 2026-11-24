@@ -181,6 +181,12 @@
       return false;
     }
 
+    isMapPressed() {
+      if (this.playerCount === 1 && this.isKeyJustPressed('KeyM')) return true;
+      if (this.isKeyJustPressed('KeyI') || this.isKeyJustPressed('Backquote')) return true;
+      return false;
+    }
+
     endFrame() {
       this.prevKeys = new Set(this.keys);
       const pads = this.connectedPads;

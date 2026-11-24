@@ -1086,6 +1086,37 @@
           break;
       }
 
+      // Burning Ember Rod flame flicker aura
+      if (e.burnTimer > 0) {
+        const bf = Math.floor(time * 18 + e.x) % 2;
+        ctx.fillStyle = 'rgba(249, 115, 22, 0.78)';
+        ctx.fillRect(Math.round(ex) - 7 + bf * 2, y + 2, 5, 7);
+        ctx.fillRect(Math.round(ex) + 2 - bf * 2, y + 6, 5, 6);
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(Math.round(ex) - 5 + bf * 2, y + 4, 2, 3);
+      }
+
+      // Compact Hi-Bit pixel HP bar above damaged non-boss enemies
+      const isBoss =
+        e.type === 'boss' ||
+        e.type === 'frost_boss' ||
+        e.type === 'desert_boss' ||
+        e.type === 'magma_boss';
+      if (!isBoss && e.hp > 0 && e.hp < e.maxHp) {
+        const bw = Math.max(22, Math.min(34, ew));
+        const bx = Math.round(ex - bw / 2);
+        const by = y - 10;
+        const pct = Math.max(0, Math.min(1, e.hp / e.maxHp));
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, 6);
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(bx, by, bw, 4);
+        ctx.fillStyle = pct > 0.45 ? '#ef4444' : '#f59e0b';
+        ctx.fillRect(bx, by, Math.max(2, Math.round(bw * pct)), 4);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.fillRect(bx, by, Math.max(2, Math.round(bw * pct)), 1);
+      }
+
       // Orbiting twin stun stars
       if (e.stunTimer > 0) {
         for (let i = 0; i < 2; i++) {

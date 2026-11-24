@@ -55,6 +55,7 @@ const makeCtx = () => ({
   font: '',
   textAlign: '',
   fillRect() {},
+  strokeRect() {},
   clearRect() {},
   drawImage() {},
   save() {},
@@ -123,50 +124,50 @@ assert(roomIds.length >= 13, `Expected at least 13 rooms, got ${roomIds.length}`
 const opp = { north: 'south', south: 'north', east: 'west', west: 'east' };
 for (const id of roomIds) {
   const r = rooms[id];
-  assert(r.grid.length === FB.ROOM_ROWS, `${id}: expected ${FB.ROOM_ROWS} rows`);
-  for (let row = 0; row < FB.ROOM_ROWS; row++) {
-    assert(r.grid[row].length === FB.ROOM_COLS, `${id} row ${row}: expected ${FB.ROOM_COLS} cols`);
+  const rRows = r.grid.length;
+  const rCols = r.grid[0]?.length || 0;
+  assert(rRows >= 9 && rCols >= 10, `${id}: room grid too small (${rCols}x${rRows})`);
+  assert(r.rows === rRows && r.cols === rCols, `${id}: room rows/cols metadata matches grid`);
+  for (let row = 0; row < rRows; row++) {
+    assert(r.grid[row].length === rCols, `${id} row ${row}: inconsistent col count (${r.grid[row].length} != ${rCols})`);
   }
-  for (const [dir, target] of Object.entries(r.exits || {})) {
+  for (const [dir, exitSpec] of Object.entries(r.exits || {})) {
+    const target = typeof exitSpec === 'string' ? exitSpec : exitSpec.target;
     assert(!!rooms[target], `${id}: exit ${dir} points to missing room ${target}`);
+    const revSpec = rooms[target].exits?.[opp[dir]];
+    const revTarget = typeof revSpec === 'string' ? revSpec : revSpec?.target;
     assert(
-      rooms[target].exits?.[opp[dir]] === id,
-      `${id}: exit ${dir} -> ${target} is not reciprocal`
+      revTarget === id,
+      `${id}: exit ${dir} -> ${target} is not reciprocal (got ${revTarget})`
     );
-    const coords =
-      dir === 'north'
-        ? [
-            [0, 9],
-            [0, 10],
-          ]
-        : dir === 'south'
-          ? [
-              [12, 9],
-              [12, 10],
-            ]
-          : dir === 'west'
-            ? [
-                [6, 0],
-                [7, 0],
-              ]
-            : [
-                [6, 19],
-                [7, 19],
-              ];
-    for (const [rr, cc] of coords) {
-      const tile = r.grid[rr][cc];
-      assert(
-        tile !== T.TREE && tile !== T.DUNGEON_WALL && tile !== T.STONE_WALL && tile !== T.DARK_TREE,
-        `${id}: exit ${dir} blocked by wall tile ${tile} at (${rr},${cc})`
-      );
+    // Verify at least one non-wall opening along that border edge
+    let hasOpening = false;
+    const isWall = (tile) =>
+      tile === T.TREE || tile === T.DUNGEON_WALL || tile === T.STONE_WALL || tile === T.DARK_TREE;
+    if (dir === 'north' || dir === 'south') {
+      const rr = dir === 'north' ? 0 : rRows - 1;
+      for (let c = 1; c < rCols - 1; c++) {
+        if (!isWall(r.grid[rr][c])) hasOpening = true;
+      }
+    } else {
+      const cc = dir === 'west' ? 0 : rCols - 1;
+      for (let rr = 1; rr < rRows - 1; rr++) {
+        if (!isWall(r.grid[rr][cc])) hasOpening = true;
+      }
+    }
+    assert(hasOpening, `${id}: exit ${dir} has no walkable/door opening on border`);
+    if (typeof exitSpec === 'object' && exitSpec.targetCol !== undefined && exitSpec.targetRow !== undefined) {
+      const tr = rooms[target];
+      const dt = tr.grid[exitSpec.targetRow]?.[exitSpec.targetCol];
+      assert(!FB.SOLID_TILES.has(dt), `${id}: exit ${dir} lands on solid tile ${dt} in ${target}`);
     }
   }
   for (const p of r.portals || []) {
     const tr = rooms[p.targetRoom];
     assert(!!tr, `${id}: portal target ${p.targetRoom} missing`);
-    const destTile = tr.grid[p.targetRow][p.targetCol];
+    const destTile = tr.grid[p.targetRow]?.[p.targetCol];
     assert(
-      !FB.SOLID_TILES.has(destTile),
+      destTile !== undefined && !FB.SOLID_TILES.has(destTile),
       `${id}: portal lands on solid tile ${destTile} in ${p.targetRoom} (${p.targetCol},${p.targetRow})`
     );
   }
@@ -463,9 +464,66 @@ assert(!g.enemies.some((e) => e.alive && e.isSummoned), 'Glacior defeat clears s
 
 console.log('[PASS] Hi-Bit 32x32 Graphics, Dark World Pot Ground Fix & Boss Minion Summoning');
 
-// 11. Visit & render every room in the world at Hi-Bit 640x416
+// 11. Phase 1 Expansion: Variable/Thin Rooms, Camera, Sliding Transitions, Burn DoT, Boss Intro & Map Drawer
+const thinGrid = FB.parseGrid(Array.from({ length: 20 }, (_, r) => (r === 0 || r === 19 ? '############' : '#..........#')));
+assert(thinGrid.length === 20 && thinGrid[0].length === 12, 'parseGrid parses thin 12x20 vertical corridor');
+const wideGrid = FB.parseGrid(Array.from({ length: 18 }, (_, r) => (r === 0 || r === 17 ? '#'.repeat(32) : '#' + '.'.repeat(30) + '#')));
+assert(wideGrid.length === 18 && wideGrid[0].length === 32, 'parseGrid parses wide 32x18 scrolling room');
+
+// Verify thin-room camera centering and wide-room camera scroll
+g.rooms._test_thin = { id: '_test_thin', name: 'Test Thin Ravine', area: 'overworld', gx: 99, gy: 99, grid: thinGrid, rows: 20, cols: 12, width: 12 * 16, height: 20 * 16, visited: false, openedChests: new Set(), claimedPedestals: new Set(), destroyedTiles: new Set(), exits: {} };
+g.enterRoom('_test_thin', { col: 6, row: 10 });
+assert(g.camX < 0, `Expected negative centered camX on thin 12-col room, got ${g.camX}`);
+assert(g.camY > 0, `Expected scrolled camY on tall 20-row room, got ${g.camY}`);
+g.render();
+assert(g.roomCanvas.width === 12 * 32 && g.roomCanvas.height === 20 * 32, 'roomCanvas dynamically resizes to thin room');
+delete g.rooms._test_thin;
+
+// Sliding camera transition between rooms
+g.enterRoom('ow_start', { col: 18, row: 7 });
+g.render();
+g.transitionToRoom('east', 'ow_river', g.humanHeroes[0]);
+assert(!!g.slideTrans && g.slideTrans.dir === 'east', 'Border walk triggers Zelda sliding-camera transition');
+g.update(0.16);
+g.render();
+g.update(0.25);
+assert(!g.slideTrans, 'Sliding-camera transition completes cleanly');
+
+// Ember Rod Burn DoT
+const burnMob = new FB.Enemy('octorok', 120, 120, 1, 'overworld');
+g.enemies = [burnMob];
+const hpBeforeBurn = burnMob.hp;
+burnMob.hit(2, 100, 120, g.humanHeroes[0], g, { isFire: true });
+assert(burnMob.burnTimer > 2.0, 'Fire hit ignites enemy Burn DoT');
+const hpAfterFireHit = burnMob.hp;
+assert(hpAfterFireHit < hpBeforeBurn, 'Initial fire hit dealt damage');
+g.updateEnemies(0.75);
+assert(burnMob.hp < hpAfterFireHit, 'Burn DoT ticked extra fire damage over time');
+
+// Slow-mo boss shatter & Boss Intro card
+g.bossDefeated = false;
+g.enterRoom('dg_boss', { col: 10, row: 10 });
+assert(FB.ui.bossIntroTimer > 1.5, 'Entering boss chamber triggers Boss Intro Title Card');
+const bossRef = g.enemies.find((e) => e.type === 'boss');
+g.onBossDefeated(bossRef);
+assert(g.slowMoTimer > 0.4, 'Boss defeat triggers dramatic slow-motion shatter');
+
+// New BGM tracks & World Map Drawer toggle
+for (const trk of ['frost', 'shop', 'village', 'desert', 'mountain']) {
+  FB.audio.playMusic(trk);
+  assert(FB.audio.currentTrack === trk, `BGM track "${trk}" plays cleanly`);
+}
+g.state = 'playing';
+g.toggleMapDrawer(true);
+assert(g.mapOpen === true, 'World Map Drawer opens cleanly');
+g.toggleMapDrawer(false);
+assert(g.mapOpen === false, 'World Map Drawer closes cleanly');
+console.log('[PASS] Phase 1 Expansion: Variable/Thin Rooms, Sliding Transitions, Burn DoT, Boss Intro & World Map Drawer');
+
+// 12. Visit & render every room in the world at Hi-Bit 640x416
 for (const id of Object.keys(g.rooms)) {
-  g.enterRoom(id, { col: 10, row: 7 });
+  const r = g.rooms[id];
+  g.enterRoom(id, { col: Math.floor((r.cols || 20) / 2), row: Math.floor((r.rows || 13) / 2) });
   g.update(0.02);
   g.render();
 }

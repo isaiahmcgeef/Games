@@ -74,26 +74,27 @@
     }
 
     _tileAt(grid, col, row) {
-      if (row < 0 || row >= FB.ROOM_ROWS || col < 0 || col >= FB.ROOM_COLS) return null;
+      if (!grid || row < 0 || row >= grid.length || col < 0 || col >= (grid[0]?.length || 0)) return null;
       return grid[row][col];
     }
 
     /**
-     * Pre-bake the entire static 640x416 room (underlays, auto-tiled terrain,
-     * biome walls/props, and 2.5D directional cast shadows) onto roomCtx.
+     * Pre-bake the entire static room (variable cols x rows) onto roomCtx at 32x32 Hi-Bit pixels/tile.
      */
     bakeRoom(ctx, room) {
       if (!room || !room.grid) return;
       const grid = room.grid;
+      const rows = grid.length;
+      const cols = grid[0] ? grid[0].length : FB.ROOM_COLS;
       const area = room.area || 'overworld';
       const seed = this.strSeed(room.id || area);
 
       ctx.imageSmoothingEnabled = false;
-      ctx.clearRect(0, 0, FB.RENDER_W, FB.RENDER_H);
+      ctx.clearRect(0, 0, cols * HT, rows * HT);
 
       // Pass 1: Draw all 32x32 tiles with neighbor awareness & deterministic variants
-      for (let r = 0; r < FB.ROOM_ROWS; r++) {
-        for (let c = 0; c < FB.ROOM_COLS; c++) {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
           const id = grid[r][c];
           const h = this.hash(seed, c, r);
           this._drawTileHiBit(ctx, id, c * HT, r * HT, c, r, grid, area, h);
@@ -101,8 +102,8 @@
       }
 
       // Pass 2: 2.5D Directional Cast Shadows onto adjacent walkable tiles (south & east)
-      for (let r = 0; r < FB.ROOM_ROWS; r++) {
-        for (let c = 0; c < FB.ROOM_COLS; c++) {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
           const id = grid[r][c];
           if (!WALKABLE_SHADOW_RECEIVERS.has(id)) continue;
           const ox = c * HT;
@@ -1286,12 +1287,18 @@
     /**
      * Live per-frame animated tile accents drawn at crisp 640x416 over the cached room canvas.
      */
-    drawAnimatedTileAccents(ctx, room, time) {
+    drawAnimatedTileAccents(ctx, room, time, camX = 0, camY = 0) {
       if (!room || !room.grid) return;
       const grid = room.grid;
+      const rows = grid.length;
+      const cols = grid[0] ? grid[0].length : FB.ROOM_COLS;
+      const minC = Math.max(0, Math.floor(camX / FB.TILE_SIZE) - 1);
+      const maxC = Math.min(cols - 1, Math.ceil((camX + FB.VIEW_W) / FB.TILE_SIZE) + 1);
+      const minR = Math.max(0, Math.floor(camY / FB.TILE_SIZE) - 1);
+      const maxR = Math.min(rows - 1, Math.ceil((camY + FB.VIEW_H) / FB.TILE_SIZE) + 1);
 
-      for (let r = 0; r < FB.ROOM_ROWS; r++) {
-        for (let c = 0; c < FB.ROOM_COLS; c++) {
+      for (let r = minR; r <= maxR; r++) {
+        for (let c = minC; c <= maxC; c++) {
           const id = grid[r][c];
           const dx = c * HT;
           const dy = r * HT;

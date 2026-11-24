@@ -295,6 +295,16 @@
             this._tone(f, i * 0.045, 0.22, 'sine', 0.075);
           });
           break;
+        case 'laser':
+          this._tone(1480, 0, 0.14, 'sawtooth', 0.08, 420);
+          this._noise(0, 0.12, 0.09, 3200);
+          break;
+        case 'heartPiece':
+          [523, 659, 784, 1046.5, 1318.5].forEach((f, i) => {
+            this._tone(f, i * 0.075, i === 4 ? 0.36 : 0.09, 'triangle', 0.085);
+            this._tone(f * 0.5, i * 0.075, i === 4 ? 0.36 : 0.09, 'sine', 0.06);
+          });
+          break;
       }
     }
 
@@ -336,6 +346,7 @@
         },
         dungeon: {
           tempoMs: 220,
+          wave: 'triangle',
           lead: [
             64, 0, 67, 0, 69, 0, 67, 64, 62, 0, 64, 0, 67, 0, 0, 0,
             64, 0, 67, 0, 71, 0, 72, 71, 69, 0, 67, 0, 64, 0, 0, 0,
@@ -347,6 +358,71 @@
             40, 0, 47, 0, 43, 0, 50, 0, 45, 0, 47, 0, 40, 0, 47, 0,
             43, 0, 50, 0, 45, 0, 52, 0, 43, 0, 47, 0, 42, 0, 47, 0,
             38, 0, 45, 0, 42, 0, 47, 0, 40, 0, 47, 0, 40, 0, 38, 0,
+          ],
+        },
+        frost: {
+          // Crystalline shimmering icy arpeggio theme for Frost Spire!
+          tempoMs: 188,
+          wave: 'sine',
+          lead: [
+            76, 79, 83, 88, 83, 79, 76, 0, 74, 78, 81, 86, 81, 78, 74, 0,
+            72, 76, 79, 84, 83, 79, 76, 74, 71, 74, 78, 83, 78, 0, 0, 0,
+          ],
+          bass: [
+            52, 0, 0, 47, 52, 0, 47, 0, 50, 0, 0, 45, 50, 0, 45, 0,
+            48, 0, 0, 43, 48, 0, 43, 0, 47, 0, 50, 0, 47, 0, 43, 0,
+          ],
+        },
+        shop: {
+          // Cozy bouncy sanctuary merchant melody!
+          tempoMs: 185,
+          wave: 'triangle',
+          lead: [
+            72, 0, 76, 79, 81, 0, 79, 76, 74, 0, 77, 79, 76, 0, 72, 0,
+            72, 0, 76, 79, 84, 0, 81, 79, 77, 76, 74, 71, 72, 0, 0, 0,
+          ],
+          bass: [
+            48, 0, 55, 0, 53, 0, 57, 0, 50, 0, 55, 0, 48, 0, 55, 0,
+            48, 0, 55, 0, 53, 0, 57, 0, 50, 0, 55, 0, 48, 0, 52, 0,
+          ],
+        },
+        village: {
+          // Warm pastoral Kakariko-inspired village melody!
+          tempoMs: 210,
+          wave: 'triangle',
+          lead: [
+            67, 0, 71, 74, 76, 0, 74, 71, 72, 0, 71, 67, 69, 0, 0, 0,
+            67, 0, 71, 74, 79, 0, 76, 74, 72, 74, 71, 69, 67, 0, 0, 0,
+          ],
+          bass: [
+            43, 0, 50, 0, 47, 0, 50, 0, 48, 0, 55, 0, 45, 0, 50, 0,
+            43, 0, 50, 0, 48, 0, 55, 0, 50, 0, 45, 0, 43, 0, 50, 0,
+          ],
+        },
+        desert: {
+          // Mystical Phrygian desert caravan & Sunspire theme!
+          tempoMs: 170,
+          wave: 'square',
+          lead: [
+            64, 0, 65, 68, 69, 0, 68, 65, 64, 0, 65, 64, 62, 0, 64, 0,
+            64, 0, 68, 69, 71, 0, 69, 68, 65, 68, 65, 64, 64, 0, 0, 0,
+          ],
+          bass: [
+            40, 0, 47, 0, 41, 0, 48, 0, 40, 0, 47, 0, 38, 0, 45, 0,
+            40, 0, 47, 0, 41, 0, 48, 0, 45, 0, 41, 0, 40, 0, 47, 0,
+          ],
+        },
+        mountain: {
+          // Driving heroic Death-Peak & Magma Citadel ascent theme!
+          tempoMs: 152,
+          wave: 'square',
+          lead: [
+            62, 62, 65, 69, 74, 0, 72, 69, 70, 0, 69, 65, 67, 0, 64, 0,
+            62, 62, 69, 72, 74, 77, 76, 74, 72, 70, 69, 67, 69, 0, 0, 0,
+          ],
+          bass: [
+            38, 38, 45, 38, 46, 46, 45, 45, 43, 43, 50, 43, 45, 45, 49, 45,
+            38, 38, 45, 38, 46, 46, 50, 46, 45, 43, 41, 40, 38, 0, 45, 0,
           ],
         },
         boss: {
@@ -375,7 +451,7 @@
         const bNote = data.bass[idx];
         const dur = (data.tempoMs / 1000) * 0.85;
         if (lNote > 0) {
-          this._tone(midiToFreq(lNote), 0, dur, trackName === 'dungeon' ? 'triangle' : 'square', 0.028);
+          this._tone(midiToFreq(lNote), 0, dur, data.wave || 'square', 0.028);
         }
         if (bNote > 0) {
           this._tone(midiToFreq(bNote), 0, dur * 1.1, 'triangle', 0.036);

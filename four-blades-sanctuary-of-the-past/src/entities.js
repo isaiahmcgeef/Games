@@ -205,6 +205,9 @@
       const scale = 1 + (playerCount - 1) * 0.4;
       const biomeMult = biome === 'frost' ? 1.25 : biome === 'darkworld' ? 1.15 : 1.0;
       this.isSummoned = false;
+      this.burnTimer = 0;
+      this.burnTick = 0;
+      this.burnOwner = null;
 
       switch (type) {
         case 'octorok':
@@ -299,7 +302,7 @@
     }
 
     hit(damage, srcX, srcY, attacker, game, options = {}) {
-      if (!this.alive || this.hurtTimer > 0.08) return false;
+      if (!this.alive || (!options.isBurn && this.hurtTimer > 0.08)) return false;
 
       // Boss shield orbs protect the core until at least 2 orbs are broken in phase 1
       if (this.type === 'boss' && !options.ignoreOrbs) {
@@ -312,15 +315,20 @@
       }
 
       // Knights resist frontal non-bomb hits slightly unless stunned/spin
-      if (this.type === 'knight' && damage < 3 && this.stunTimer <= 0 && !options.isBomb) {
+      if (this.type === 'knight' && damage < 3 && this.stunTimer <= 0 && !options.isBomb && !options.isBurn) {
         damage = 1;
       }
 
-      // Ember Rod melts Frost Sovereign Glacior for bonus fire damage!
-      if (this.type === 'frost_boss' && options.isFire) {
-        damage += 2;
-        game.spawnParticles(this.x, this.y, '#fb923c', 10, 80, { shape: 'star' });
-        game.addFloatingText(this.x, this.y - 16, 'MELT!', '#fb923c');
+      // Ember Rod ignites enemies for Burn DoT & melts Frost Sovereign Glacior for bonus fire damage!
+      if (options.isFire) {
+        this.burnTimer = 2.6;
+        this.burnTick = 0.65;
+        this.burnOwner = attacker;
+        if (this.type === 'frost_boss') {
+          damage += 2;
+          game.spawnParticles(this.x, this.y, '#fb923c', 10, 80, { shape: 'star' });
+          game.addFloatingText(this.x, this.y - 16, 'MELT!', '#fb923c');
+        }
       }
 
       this.hp -= damage;

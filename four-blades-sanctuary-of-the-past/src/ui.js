@@ -11,6 +11,7 @@
       this.els = {};
       this.toastTimer = 0;
       this.toastText = '';
+      this.bossIntroTimer = 0;
     }
 
     init(game) {
@@ -20,6 +21,15 @@
         pauseOverlay: document.getElementById('pause-overlay'),
         gameoverOverlay: document.getElementById('gameover-overlay'),
         victoryOverlay: document.getElementById('victory-overlay'),
+        mapOverlay: document.getElementById('map-overlay'),
+        worldmapCanvas: document.getElementById('worldmap-canvas'),
+        mapJournal: document.getElementById('map-journal'),
+        mapAreaSubtitle: document.getElementById('map-area-subtitle'),
+        btnMap: document.getElementById('btn-map'),
+        btnCloseMap: document.getElementById('btn-close-map'),
+        bossIntroCard: document.getElementById('boss-intro-card'),
+        bossIntroSub: document.getElementById('boss-intro-sub'),
+        bossIntroTitle: document.getElementById('boss-intro-title'),
         hudPlayers: document.getElementById('hud-players'),
         hudKeys: document.getElementById('hud-keys'),
         hudBossKey: document.getElementById('hud-boss-key'),
@@ -141,6 +151,21 @@
           }
         });
       }
+      if (this.els.btnMap) {
+        this.els.btnMap.addEventListener('click', () => {
+          if (game.state === 'playing') game.toggleMapDrawer();
+        });
+      }
+      if (this.els.btnCloseMap) {
+        this.els.btnCloseMap.addEventListener('click', () => {
+          game.toggleMapDrawer(false);
+        });
+      }
+      if (this.els.minimapCanvas) {
+        this.els.minimapCanvas.addEventListener('click', () => {
+          if (game.state === 'playing') game.toggleMapDrawer();
+        });
+      }
 
       this.updateControlCards(1);
     }
@@ -242,6 +267,29 @@
       this.els.pauseOverlay?.classList.toggle('hidden', name !== 'paused');
       this.els.gameoverOverlay?.classList.toggle('hidden', name !== 'gameover');
       this.els.victoryOverlay?.classList.toggle('hidden', name !== 'victory');
+      if (name && name !== 'playing') {
+        this.els.mapOverlay?.classList.add('hidden');
+      }
+    }
+
+    showBossIntro(subtitle, title) {
+      this.bossIntroTimer = 2.25;
+      if (!this.els.bossIntroCard) return;
+      if (this.els.bossIntroSub) this.els.bossIntroSub.textContent = subtitle || 'BOSS';
+      if (this.els.bossIntroTitle) this.els.bossIntroTitle.textContent = title || 'GUARDIAN';
+      this.els.bossIntroCard.classList.remove('hidden');
+      // Restart CSS animation cleanly
+      this.els.bossIntroCard.style.animation = 'none';
+      void this.els.bossIntroCard.offsetWidth;
+      this.els.bossIntroCard.style.animation = '';
+    }
+
+    setMapVisible(open, game) {
+      if (!this.els.mapOverlay) return;
+      this.els.mapOverlay.classList.toggle('hidden', !open);
+      if (open && game) {
+        this.renderMapDrawer(game);
+      }
     }
 
     showToast(text, duration = 3.2) {
@@ -270,6 +318,19 @@
           this.els.toastBanner.classList.add('hidden');
         }
       }
+      if (this.bossIntroTimer > 0) {
+        this.bossIntroTimer -= dt;
+        if (this.bossIntroTimer <= 0 && this.els.bossIntroCard) {
+          this.els.bossIntroCard.classList.add('hidden');
+        }
+      }
+    }
+
+    _mapGroupForArea(area) {
+      if (area === 'overworld' || area === 'village' || area === 'desert' || area === 'mountain') {
+        return 'lightworld';
+      }
+      return area || 'lightworld';
     }
 
     renderHUD(game) {
@@ -291,8 +352,10 @@
           : `<span class="hud-item-pill">—</span>`;
         const badges = [
           h.potions > 0 ? `🧪${h.potions}` : '',
+          h.blueElixir ? '💙' : '',
           h.mirrorShield ? '🛡' : '',
-          h.temperedSword ? '⚔' : '',
+          h.goldenBlade ? '👑' : h.temperedSword ? '⚔' : '',
+          h.heroMail ? '🔰' : '',
         ]
           .filter(Boolean)
           .join('');
@@ -321,20 +384,29 @@
 
       this.els.hudPlayers.innerHTML = html;
 
-      const inFrost = game.room && game.room.area === 'frost';
+      const area = game.room ? game.room.area : 'overworld';
+      let smallK = game.smallKeys;
+      let hasBk = game.hasBossKey;
+      let bkName = 'BOSS KEY';
+      if (area === 'frost') {
+        smallK = game.frostSmallKeys;
+        hasBk = game.hasFrostBossKey;
+        bkName = 'FROST KEY';
+      } else if (area === 'desert_dungeon') {
+        smallK = game.desertSmallKeys;
+        hasBk = game.hasDesertBossKey;
+        bkName = 'SOLAR KEY';
+      } else if (area === 'magma') {
+        smallK = game.magmaSmallKeys;
+        hasBk = game.hasMagmaBossKey;
+        bkName = 'MAGMA KEY';
+      }
       if (this.els.hudKeys) {
-        this.els.hudKeys.textContent = `${inFrost ? game.frostSmallKeys : game.smallKeys}`;
+        this.els.hudKeys.textContent = `${smallK}`;
       }
       if (this.els.hudBossKey) {
-        const hasBk = inFrost ? game.hasFrostBossKey : game.hasBossKey;
-        this.els.hudBossKey.classList.toggle('has-key', hasBk);
-        this.els.hudBossKey.textContent = hasBk
-          ? inFrost
-            ? 'FROST KEY ✓'
-            : 'BOSS KEY ✓'
-          : inFrost
-            ? 'FROST KEY —'
-            : 'BOSS KEY —';
+        this.els.hudBossKey.classList.toggle('has-key', !!hasBk);
+        this.els.hudBossKey.textContent = hasBk ? `${bkName} ✓` : `${bkName} —`;
       }
       if (this.els.hudRoomName && game.room) {
         this.els.hudRoomName.textContent = game.room.name;
@@ -350,14 +422,24 @@
         this.els.hudHeroBadge.classList.toggle('hidden', !game.heroMode);
       }
 
-      // Boss health bar (Vaalor or Frost Sovereign Glacior)
-      const boss = game.enemies.find((e) => (e.type === 'boss' || e.type === 'frost_boss') && e.alive);
+      // Boss health bar (all 4 Sovereign Bosses!)
+      const boss = game.enemies.find(
+        (e) =>
+          e.alive &&
+          (e.type === 'boss' || e.type === 'frost_boss' || e.type === 'desert_boss' || e.type === 'magma_boss')
+      );
       if (this.els.bossBarWrap && this.els.bossBarFill) {
         if (boss) {
           this.els.bossBarWrap.classList.remove('hidden');
           if (this.els.bossBarTitle) {
             this.els.bossBarTitle.textContent =
-              boss.type === 'frost_boss' ? 'Frost Sovereign Glacior' : 'Shadow Wraith Vaalor';
+              boss.type === 'frost_boss'
+                ? 'Frost Sovereign Glacior'
+                : boss.type === 'desert_boss'
+                  ? 'Solar Sentinel Solkar'
+                  : boss.type === 'magma_boss'
+                    ? 'Forge Titan Ignis Rex'
+                    : 'Shadow Wraith Vaalor';
           }
           const pct = Math.max(0, Math.min(100, (boss.hp / boss.maxHp) * 100));
           this.els.bossBarFill.style.width = `${pct}%`;
@@ -369,21 +451,20 @@
       this.renderMinimap(game);
     }
 
-    renderMinimap(game) {
-      const canvas = this.els.minimapCanvas;
+    _drawAreaMap(canvas, game, detailed = false) {
       if (!canvas || !game.room) return;
       const ctx = canvas.getContext('2d');
       const w = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
 
-      ctx.fillStyle = '#0e1420';
+      ctx.fillStyle = '#0b101b';
       ctx.fillRect(0, 0, w, h);
 
-      const currentArea = game.room.area;
-      const areaRooms = Object.values(game.rooms).filter((r) => r.area === currentArea);
+      const group = this._mapGroupForArea(game.room.area);
+      const areaRooms = Object.values(game.rooms).filter((r) => this._mapGroupForArea(r.area) === group);
+      if (areaRooms.length === 0) return;
 
-      // Compute grid bounds
       let minX = Infinity,
         maxX = -Infinity,
         minY = Infinity,
@@ -397,8 +478,10 @@
 
       const cols = Math.max(1, maxX - minX + 1);
       const rows = Math.max(1, maxY - minY + 1);
-      const cellW = Math.min(20, Math.floor((w - 12) / cols));
-      const cellH = Math.min(13, Math.floor((h - 10) / rows));
+      const padX = detailed ? 24 : 10;
+      const padY = detailed ? 20 : 8;
+      const cellW = Math.min(detailed ? 56 : 18, Math.floor((w - padX) / cols));
+      const cellH = Math.min(detailed ? 38 : 12, Math.floor((h - padY) / rows));
       const startX = Math.floor((w - cols * cellW) / 2);
       const startY = Math.floor((h - rows * cellH) / 2);
 
@@ -409,7 +492,7 @@
 
         if (!r.visited && !isCurrent && !r.isBossRoom) {
           ctx.fillStyle = 'rgba(100, 116, 139, 0.22)';
-          ctx.fillRect(rx + 1, ry + 1, cellW - 2, cellH - 2);
+          ctx.fillRect(rx + 2, ry + 2, Math.max(4, cellW - 4), Math.max(4, cellH - 4));
           continue;
         }
 
@@ -417,6 +500,12 @@
           ctx.fillStyle = '#facc15';
         } else if (r.isBossRoom) {
           ctx.fillStyle = '#dc2626';
+        } else if (r.area === 'village') {
+          ctx.fillStyle = '#0ea5e9';
+        } else if (r.area === 'desert' || r.area === 'desert_dungeon') {
+          ctx.fillStyle = '#d97706';
+        } else if (r.area === 'mountain' || r.area === 'magma') {
+          ctx.fillStyle = '#b91c1c';
         } else if (r.area === 'overworld') {
           ctx.fillStyle = '#3f8f47';
         } else if (r.area === 'darkworld') {
@@ -426,12 +515,125 @@
         } else {
           ctx.fillStyle = '#476899';
         }
-        ctx.fillRect(rx + 1, ry + 1, cellW - 2, cellH - 2);
 
-        if (r.isBossRoom) {
+        // Slightly reflect wide/tall room proportions in detailed view
+        const rCols = r.cols || 20;
+        const rRows = r.rows || 13;
+        const rw = detailed && rCols < 16 ? Math.max(8, Math.floor(cellW * 0.62)) : Math.max(4, cellW - 4);
+        const rh = detailed && rRows < 12 ? Math.max(8, Math.floor(cellH * 0.65)) : Math.max(4, cellH - 4);
+        const ox = rx + Math.floor((cellW - rw) / 2);
+        const oy = ry + Math.floor((cellH - rh) / 2);
+        ctx.fillRect(ox, oy, rw, rh);
+
+        if (detailed) {
+          ctx.strokeStyle = isCurrent ? '#ffffff' : 'rgba(255,255,255,0.22)';
+          ctx.lineWidth = isCurrent ? 2 : 1;
+          ctx.strokeRect(ox + 0.5, oy + 0.5, rw - 1, rh - 1);
+
+          // Unopened chest indicator
+          const hasUnopenedChest =
+            r.visited &&
+            r.chests &&
+            r.chests.some((ch) => !r.openedChests || !r.openedChests.has(`${ch.col},${ch.row}`));
+          if (hasUnopenedChest) {
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(ox + rw - 7, oy + 3, 4, 4);
+          }
+
+          // Boss marker
+          if (r.isBossRoom) {
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(ox + Math.floor(rw / 2) - 2, oy + Math.floor(rh / 2) - 2, 5, 5);
+          }
+        } else if (r.isBossRoom) {
           ctx.fillStyle = '#fef08a';
           ctx.fillRect(rx + Math.floor(cellW / 2) - 1, ry + Math.floor(cellH / 2) - 1, 2, 2);
         }
+      }
+    }
+
+    renderMinimap(game) {
+      this._drawAreaMap(this.els.minimapCanvas, game, false);
+    }
+
+    _questObjectiveHint(game) {
+      if (!game.bossDefeated) {
+        return 'Act I: Explore the Light Overworld & Villages, then conquer the Sanctuary Palace (North-East) and defeat Vaalor to claim the Magic Mirror.';
+      }
+      const remaining = [];
+      if (!game.frostBossDefeated) remaining.push('Frost Spire (Dark World North — Glacior)');
+      if (game.rooms.ds_boss && !game.desertBossDefeated) remaining.push('Sunspire Desert Temple (Solkar)');
+      if (game.rooms.mg_boss && !game.magmaBossDefeated) remaining.push('Magma Citadel (Ignis Rex)');
+      if (remaining.length > 0) {
+        return `Act II (Open World): Conquer remaining dungeons in any order — ${remaining.join(' • ')}.`;
+      }
+      return 'All Sovereign Medallions united! Step onto a Sovereign Altar or test your might in the Sanctuary Arena!';
+    }
+
+    renderMapDrawer(game) {
+      if (!game || !game.room) return;
+      this._drawAreaMap(this.els.worldmapCanvas, game, true);
+
+      const areaLabels = {
+        overworld: 'Light Overworld — Hyrule-Scale Realm',
+        village: 'Sanctuary Villages & Outposts',
+        desert: 'Sunscorched Desert & Oasis',
+        mountain: 'Crag-Peak Mountains & Ridge',
+        darkworld: 'Twilight Dark World',
+        dungeon: 'Palace #1 — Sanctuary Palace',
+        frost: 'Dungeon #2 — Frost Spire',
+        desert_dungeon: 'Dungeon #3 — Sunspire Desert Temple',
+        magma: 'Dungeon #4 — Magma Citadel',
+        shop: 'Interior Sanctuary',
+      };
+      if (this.els.mapAreaSubtitle) {
+        this.els.mapAreaSubtitle.textContent = `${game.room.name} (${areaLabels[game.room.area] || game.room.area}) • ${game.roomCols}×${game.roomRows} tiles`;
+      }
+
+      if (this.els.mapJournal) {
+        const h0 = game.humanHeroes[0];
+        const items = (h0?.items || [])
+          .map((id) => FB.ITEM_META[id]?.name || id)
+          .join(', ') || 'None yet';
+
+        const upgrades = [
+          h0?.temperedSword ? 'Tempered Blade' : null,
+          h0?.goldenBlade ? 'Golden Master Blade' : null,
+          h0?.mirrorShield ? 'Mirror Shield' : null,
+          h0?.pegasusOil ? 'Pegasus Oil' : null,
+          h0?.gripSandals ? 'Grip Sandals' : null,
+          h0?.heroMail ? "Hero's Mail" : null,
+          h0?.blastPowder ? 'Blast Powder' : null,
+          h0?.blueElixir ? 'Blue Elixir' : null,
+        ].filter(Boolean);
+
+        const visitedCount = Object.values(game.rooms).filter((r) => r.visited).length;
+        const totalRooms = Object.keys(game.rooms).length;
+
+        this.els.mapJournal.innerHTML = `
+          <div class="journal-section">
+            <div class="journal-label">Current Objective</div>
+            <div>${this._questObjectiveHint(game)}</div>
+          </div>
+          <div class="journal-section">
+            <div class="journal-label">Sovereign Medallions</div>
+            <div class="medallion-row">
+              <div class="medallion-pill ${game.bossDefeated ? 'earned' : ''}">${game.bossDefeated ? '★' : '○'} Shadow (Vaalor)</div>
+              <div class="medallion-pill ${game.frostBossDefeated ? 'earned' : ''}">${game.frostBossDefeated ? '★' : '○'} Frost (Glacior)</div>
+              <div class="medallion-pill ${game.desertBossDefeated ? 'earned' : ''}">${game.desertBossDefeated ? '★' : '○'} Solar (Solkar)</div>
+              <div class="medallion-pill ${game.magmaBossDefeated ? 'earned' : ''}">${game.magmaBossDefeated ? '★' : '○'} Magma (Ignis)</div>
+            </div>
+          </div>
+          <div class="journal-section">
+            <div class="journal-label">Exploration &amp; Heart Pieces</div>
+            <div>Rooms Explored: <strong>${visitedCount} / ${totalRooms}</strong> &nbsp;•&nbsp; Heart Pieces: <strong>${game.heartPieces % 4} / 4</strong> (Total: ${game.heartPieces})</div>
+          </div>
+          <div class="journal-section">
+            <div class="journal-label">Dungeon Tools &amp; Village Upgrades</div>
+            <div><strong>Items:</strong> ${items}</div>
+            <div><strong>Upgrades:</strong> ${upgrades.length ? upgrades.join(', ') : 'Visit Villages & Shops!'}</div>
+          </div>
+        `;
       }
     }
 

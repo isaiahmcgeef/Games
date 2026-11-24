@@ -44,15 +44,30 @@
       this.hasBossKey = false;
       this.frostSmallKeys = 0;
       this.hasFrostBossKey = false;
+      this.desertSmallKeys = 0;
+      this.hasDesertBossKey = false;
+      this.magmaSmallKeys = 0;
+      this.hasMagmaBossKey = false;
       this.unlockedLocks = new Set();
       this.bossDefeated = false;
       this.act1Cleared = false;
       this.frostBossDefeated = false;
+      this.desertBossDefeated = false;
+      this.magmaBossDefeated = false;
+      this.heartPieces = 0;
+      this.collectedHeartPieces = new Set();
       this.heroMode = false;
       this.activeSaveSlot = 0;
       this.activeDialog = null;
       this.dialogTimer = 0;
       this.hudTick = 0;
+      this.camX = 0;
+      this.camY = 0;
+      this.slideTrans = null;
+      this.prevViewCanvas = null;
+      this.prevViewCtx = null;
+      this.slowMoTimer = 0;
+      this.mapOpen = false;
       this.roomCanvas = null;
       this.roomCtx = null;
       this.roomCacheKey = null;
@@ -70,6 +85,7 @@
       // Show animated Hi-Bit sanctuary courtyard behind title screen
       this.rooms = FB.createWorldData();
       this.room = this.rooms.ow_start;
+      this.updateCamera(true);
       this.initRoomAtmosphere(this.room);
 
       this.loop = this.loop.bind(this);
@@ -78,6 +94,76 @@
 
     get allHeroes() {
       return this.spiritClone ? [...this.humanHeroes, this.spiritClone] : this.humanHeroes;
+    }
+
+    get roomCols() {
+      return this.room?.cols || this.room?.grid?.[0]?.length || FB.ROOM_COLS;
+    }
+
+    get roomRows() {
+      return this.room?.rows || this.room?.grid?.length || FB.ROOM_ROWS;
+    }
+
+    get roomW() {
+      return this.roomCols * TS;
+    }
+
+    get roomH() {
+      return this.roomRows * TS;
+    }
+
+    updateCamera(snap = false, dt = 0.016) {
+      if (!this.room) return;
+      const rw = this.roomW;
+      const rh = this.roomH;
+      const live = this.humanHeroes.filter((h) => !h.downed);
+      let cx = rw / 2;
+      let cy = rh / 2;
+      if (live.length > 0) {
+        cx = live.reduce((s, h) => s + h.x, 0) / live.length;
+        cy = live.reduce((s, h) => s + h.y, 0) / live.length;
+      }
+
+      const tx =
+        rw <= FB.VIEW_W
+          ? -(FB.VIEW_W - rw) / 2
+          : Math.max(0, Math.min(rw - FB.VIEW_W, cx - FB.VIEW_W / 2));
+      const ty =
+        rh <= FB.VIEW_H
+          ? -(FB.VIEW_H - rh) / 2
+          : Math.max(0, Math.min(rh - FB.VIEW_H, cy - FB.VIEW_H / 2));
+
+      if (snap) {
+        this.camX = tx;
+        this.camY = ty;
+      } else {
+        const f = Math.min(1, dt * 11);
+        this.camX += (tx - this.camX) * f;
+        this.camY += (ty - this.camY) * f;
+      }
+
+      // Soft co-op viewport tether in large scrolling rooms so teammates stay on-screen
+      if (live.length > 1 && (rw > FB.VIEW_W || rh > FB.VIEW_H)) {
+        const minX = Math.max(10, this.camX + 10);
+        const maxX = Math.min(rw - 10, this.camX + FB.VIEW_W - 10);
+        const minY = Math.max(10, this.camY + 10);
+        const maxY = Math.min(rh - 10, this.camY + FB.VIEW_H - 10);
+        for (const h of live) {
+          if (h.x < minX) h.x = minX;
+          if (h.x > maxX) h.x = maxX;
+          if (h.y < minY) h.y = minY;
+          if (h.y > maxY) h.y = maxY;
+        }
+      }
+    }
+
+    toggleMapDrawer(force) {
+      if (this.state !== 'playing' && !this.mapOpen) return;
+      this.mapOpen = force !== undefined ? !!force : !this.mapOpen;
+      FB.audio.play('switch');
+      if (FB.ui.renderMapDrawer) {
+        FB.ui.renderMapDrawer(this, this.mapOpen);
+      }
     }
 
     saveProgress() {
@@ -322,17 +408,65 @@
       FB.ui.showDialog(msg);
     }
 
-    enterRoom(roomId, spawnPos) {
+    transitionToRoom(dir, exitSpec, triggerHero) {
+      if (!exitSpec) return;
+      const targetId = typeof exitSpec === 'string' ? exitSpec : exitSpec.target;
+      const dest = this.rooms?.[targetId];
+      if (!dest) return;
+
+      // Capture outgoing 640x416 viewport snapshot for smooth Zelda-style camera slide!
+      if (typeof document !== 'undefined' && this.canvas) {
+        if (!this.prevViewCanvas) {
+          this.prevViewCanvas = document.createElement('canvas');
+          this.prevViewCanvas.width = FB.RENDER_W;
+          this.prevViewCanvas.height = FB.RENDER_H;
+          this.prevViewCtx = this.prevViewCanvas.getContext('2d');
+        }
+        if (this.prevViewCtx) {
+          this.prevViewCtx.clearRect(0, 0, FB.RENDER_W, FB.RENDER_H);
+          this.prevViewCtx.drawImage(this.canvas, 0, 0);
+        }
+      }
+
+      const dCols = dest.cols || dest.grid?.[0]?.length || FB.ROOM_COLS;
+      const dRows = dest.rows || dest.grid?.length || FB.ROOM_ROWS;
+      let spawnPos = null;
+      if (typeof exitSpec === 'object' && exitSpec.targetCol !== undefined && exitSpec.targetRow !== undefined) {
+        spawnPos = { col: exitSpec.targetCol, row: exitSpec.targetRow };
+      } else {
+        const refCol = triggerHero ? triggerHero.x / TS : this.roomCols / 2;
+        const refRow = triggerHero ? triggerHero.y / TS : this.roomRows / 2;
+        const clampC = Math.max(1.5, Math.min(dCols - 2.5, Math.round(refCol)));
+        const clampR = Math.max(1.5, Math.min(dRows - 2.5, Math.round(refRow)));
+        if (dir === 'north') {
+          spawnPos = { col: dCols === this.roomCols ? clampC : Math.floor(dCols / 2) - 0.5, row: dRows - 2 };
+        } else if (dir === 'south') {
+          spawnPos = { col: dCols === this.roomCols ? clampC : Math.floor(dCols / 2) - 0.5, row: 1 };
+        } else if (dir === 'west') {
+          spawnPos = { col: dCols - 2, row: dRows === this.roomRows ? clampR : Math.floor(dRows / 2) };
+        } else {
+          spawnPos = { col: 1, row: dRows === this.roomRows ? clampR : Math.floor(dRows / 2) };
+        }
+      }
+
+      this.enterRoom(targetId, spawnPos, { slideDir: dir });
+    }
+
+    enterRoom(roomId, spawnPos, opts = {}) {
       const room = this.rooms[roomId];
       if (!room) return;
+
       this.room = room;
       room.visited = true;
-
       this.projectiles = [];
       this.pickups = [];
       this.particles = [];
       this.floatingTexts = [];
       this.enemies = [];
+      this.roomCacheKey = null;
+
+      const rW = this.roomW;
+      const rH = this.roomH;
 
       // Reposition heroes cleanly
       if (spawnPos) {
@@ -347,13 +481,15 @@
           let nx = spawnPos.col * TS + TS / 2 + off.x;
           let ny = spawnPos.row * TS + TS / 2 + off.y;
           // Keep strictly inside safe room bounds
-          nx = Math.max(TS * 1.5, Math.min(FB.VIEW_W - TS * 1.5, nx));
-          ny = Math.max(TS * 1.5, Math.min(FB.VIEW_H - TS * 1.5, ny));
+          nx = Math.max(TS * 1.4, Math.min(rW - TS * 1.4, nx));
+          ny = Math.max(TS * 1.4, Math.min(rH - TS * 1.4, ny));
           h.x = nx;
           h.y = ny;
           h.safeX = nx;
           h.safeY = ny;
           h.activeBoomerang = null;
+          h.activeHookshot = null;
+          h.hookZipping = false;
           h.knockTimer = 0;
           if (h.downed) {
             // Auto-revive with 2 hearts on room transition so co-op stays snappy
@@ -361,12 +497,14 @@
             h.hp = Math.min(h.maxHp, 4);
           }
         });
-        if (this.spiritClone) {
-          this.spiritClone.x = this.humanHeroes[0].x - 14;
+        if (this.spiritClone && this.humanHeroes[0]) {
+          this.spiritClone.x = Math.max(TS * 1.4, this.humanHeroes[0].x - 14);
           this.spiritClone.y = this.humanHeroes[0].y;
           this.spiritClone.cloneHold = false;
         }
       }
+
+      this.updateCamera(true);
 
       // Sync persistent locks
       if (room.locks) {
@@ -391,10 +529,25 @@
         }
       }
 
+      // Spawn hidden Heart Pieces if not yet collected
+      if (room.heartPieces) {
+        for (const hp of room.heartPieces) {
+          if (!this.collectedHeartPieces.has(hp.id)) {
+            this.pickups.push(
+              new FB.Pickup('heart_piece', hp.col * TS + 8, hp.row * TS + 8, {
+                heartPieceId: hp.id,
+              })
+            );
+          }
+        }
+      }
+
       // Spawn enemies unless this room's boss is defeated or combat puzzle already cleared
       const roomBossDefeated =
         (room.id === 'dg_boss' && this.bossDefeated) ||
-        (room.id === 'fs_boss' && this.frostBossDefeated);
+        (room.id === 'fs_boss' && this.frostBossDefeated) ||
+        (room.id === 'ds_boss' && this.desertBossDefeated) ||
+        (room.id === 'mg_boss' && this.magmaBossDefeated);
       const shouldSpawnEnemies =
         room.enemies &&
         !roomBossDefeated &&
@@ -423,33 +576,75 @@
         }
       }
 
-      // If boss room entered with boss alive, bar exit and cue boss music!
+      // Boss Room Lockdown, Boss Intro Title Cards & Unique Area BGM!
+      const midC = Math.floor(this.roomCols / 2);
+      const midR = Math.floor(this.roomRows / 2);
       if (room.isBossRoom && room.id === 'dg_boss' && !this.bossDefeated) {
         this._setDoorTiles(room, 'south', T.DOOR_BARRED);
         FB.audio.play('bossRoar');
         FB.audio.playMusic('boss');
+        FB.ui.showBossIntro?.('PALACE OF THE FOUR SEALS', 'SHADOW WRAITH — VAALOR');
         this.showToast('SHADOW WRAITH VAALOR — Break its dark orbs to expose the core!', 4.2);
       } else if (room.isBossRoom && room.id === 'dg_boss' && this.bossDefeated) {
         this._openDoorTiles(room, 'south');
-        room.grid[6][9] = T.TRIFORCE_ALTAR;
-        room.grid[6][10] = T.TRIFORCE_ALTAR;
+        room.grid[midR][midC - 1] = T.TRIFORCE_ALTAR;
+        room.grid[midR][midC] = T.TRIFORCE_ALTAR;
       } else if (room.isBossRoom && room.id === 'fs_boss' && !this.frostBossDefeated) {
         this._setDoorTiles(room, 'south', T.DOOR_BARRED);
         FB.audio.play('bossRoar');
         FB.audio.playMusic('boss');
+        FB.ui.showBossIntro?.('CROWN OF THE FROST SPIRE', 'FROST SOVEREIGN — GLACIOR');
         this.showToast('FROST SOVEREIGN GLACIOR — Melt or parry its fury to shatter the spire!', 4.5);
       } else if (room.isBossRoom && room.id === 'fs_boss' && this.frostBossDefeated) {
         this._openDoorTiles(room, 'south');
-        room.grid[6][9] = T.TRIFORCE_ALTAR;
-        room.grid[6][10] = T.TRIFORCE_ALTAR;
+        room.grid[midR][midC - 1] = T.TRIFORCE_ALTAR;
+        room.grid[midR][midC] = T.TRIFORCE_ALTAR;
+      } else if (room.isBossRoom && room.id === 'ds_boss' && !this.desertBossDefeated) {
+        this._setDoorTiles(room, 'south', T.DOOR_BARRED);
+        FB.audio.play('bossRoar');
+        FB.audio.playMusic('boss');
+        FB.ui.showBossIntro?.('SUNSPIRE SANCTUM', 'SOLAR SENTINEL — SOLKAR');
+        this.showToast('SOLAR SENTINEL SOLKAR — Reflect its solar beams to shatter its core!', 4.5);
+      } else if (room.isBossRoom && room.id === 'ds_boss' && this.desertBossDefeated) {
+        this._openDoorTiles(room, 'south');
+        room.grid[midR][midC - 1] = T.TRIFORCE_ALTAR;
+        room.grid[midR][midC] = T.TRIFORCE_ALTAR;
+      } else if (room.isBossRoom && room.id === 'mg_boss' && !this.magmaBossDefeated) {
+        this._setDoorTiles(room, 'south', T.DOOR_BARRED);
+        FB.audio.play('bossRoar');
+        FB.audio.playMusic('boss');
+        FB.ui.showBossIntro?.('HEART OF THE CALDERA', 'FORGE TITAN — IGNIS REX');
+        this.showToast('FORGE TITAN IGNIS REX — Parry its molten charges & strike true!', 4.5);
+      } else if (room.isBossRoom && room.id === 'mg_boss' && this.magmaBossDefeated) {
+        this._openDoorTiles(room, 'south');
+        room.grid[midR][midC - 1] = T.TRIFORCE_ALTAR;
+        room.grid[midR][midC] = T.TRIFORCE_ALTAR;
+      } else if (room.id === 'ow_shop' || room.area === 'shop') {
+        FB.audio.playMusic('shop');
+      } else if (room.area === 'village') {
+        FB.audio.playMusic('village');
+      } else if (room.area === 'frost') {
+        FB.audio.playMusic('frost');
+      } else if (room.area === 'desert' || room.area === 'desert_dungeon') {
+        FB.audio.playMusic('desert');
+      } else if (room.area === 'mountain' || room.area === 'magma') {
+        FB.audio.playMusic('mountain');
       } else if (room.area === 'darkworld') {
         FB.audio.playMusic('darkworld');
       } else {
-        FB.audio.playMusic(room.area === 'dungeon' || room.area === 'frost' ? 'dungeon' : 'overworld');
+        FB.audio.playMusic(room.area === 'dungeon' ? 'dungeon' : 'overworld');
       }
 
       this.initRoomAtmosphere(room);
-      this.transitionOverlayAlpha = 0.85;
+
+      if (opts.slideDir && this.prevViewCanvas) {
+        this.slideTrans = { dir: opts.slideDir, elapsed: 0, duration: 0.32 };
+        this.transitionOverlayAlpha = 0;
+      } else {
+        this.slideTrans = null;
+        this.transitionOverlayAlpha = 0.85;
+      }
+
       if (this.state === 'playing') {
         this.saveProgress();
       }
@@ -457,18 +652,22 @@
     }
 
     _setDoorTiles(room, dir, tileId) {
+      const cols = room.cols || room.grid[0].length;
+      const rows = room.rows || room.grid.length;
+      const mc = Math.floor(cols / 2);
+      const mr = Math.floor(rows / 2);
       if (dir === 'north') {
-        room.grid[0][9] = tileId;
-        room.grid[0][10] = tileId;
+        room.grid[0][mc - 1] = tileId;
+        room.grid[0][mc] = tileId;
       } else if (dir === 'south') {
-        room.grid[12][9] = tileId;
-        room.grid[12][10] = tileId;
+        room.grid[rows - 1][mc - 1] = tileId;
+        room.grid[rows - 1][mc] = tileId;
       } else if (dir === 'west') {
-        room.grid[6][0] = tileId;
-        room.grid[7][0] = tileId;
+        room.grid[mr][0] = tileId;
+        if (room.grid[mr + 1]) room.grid[mr + 1][0] = tileId;
       } else if (dir === 'east') {
-        room.grid[6][19] = tileId;
-        room.grid[7][19] = tileId;
+        room.grid[mr][cols - 1] = tileId;
+        if (room.grid[mr + 1]) room.grid[mr + 1][cols - 1] = tileId;
       }
     }
 
@@ -548,13 +747,17 @@
         FB.ui.updateGamepadBanner(FB.input.connectedPads.length);
       }
 
-      if (FB.input.isPausePressed()) {
-        if (this.state === 'playing' || this.state === 'paused') {
+      if (FB.input.isMapPressed() && (this.state === 'playing' || this.mapOpen)) {
+        this.toggleMapDrawer();
+      } else if (FB.input.isPausePressed()) {
+        if (this.mapOpen) {
+          this.toggleMapDrawer(false);
+        } else if (this.state === 'playing' || this.state === 'paused') {
           this.togglePause();
         }
       }
 
-      if (this.state === 'playing') {
+      if (this.state === 'playing' && !this.mapOpen) {
         this.update(dt);
       } else if (this.state === 'title') {
         this.updateAtmosphere(dt);
@@ -572,6 +775,15 @@
       }
       if (this.screenShake > 0) {
         this.screenShake = Math.max(0, this.screenShake - dt * 22);
+      }
+
+      // Smooth Zelda-style sliding-camera room transition (pauses gameplay cleanly for 0.32s)
+      if (this.slideTrans) {
+        this.slideTrans.elapsed += dt;
+        if (this.slideTrans.elapsed >= this.slideTrans.duration) {
+          this.slideTrans = null;
+        }
+        return;
       }
 
       // Signpost / Chest dialog pause
@@ -595,20 +807,30 @@
         return;
       }
 
+      // Dramatic slow-motion boss shatter flourish!
+      let simDt = dt;
+      if (this.slowMoTimer > 0) {
+        this.slowMoTimer = Math.max(0, this.slowMoTimer - dt);
+        simDt = dt * 0.28;
+      }
+
       this.elapsedTime += dt;
 
       // Update Heroes
       for (let i = 0; i < this.humanHeroes.length; i++) {
-        this.updateHero(this.humanHeroes[i], FB.input.getPlayerInput(i), dt);
+        this.updateHero(this.humanHeroes[i], FB.input.getPlayerInput(i), simDt);
       }
 
       // Update Solo Spirit Clone if active
       if (this.spiritClone) {
-        this.updateSpiritClone(dt);
+        this.updateSpiritClone(simDt);
       }
 
+      // Smooth live camera tracking + co-op tether
+      this.updateCamera(false, dt);
+
       // Multiplayer revive check
-      this.updateMultiplayerRevive(dt);
+      this.updateMultiplayerRevive(simDt);
 
       // Game over check (all human heroes downed)
       if (this.humanHeroes.every((h) => h.downed)) {
@@ -619,12 +841,12 @@
       }
 
       // Update Enemies, Projectiles, Pickups, Puzzles, Particles & Ambient Weather
-      this.updateEnemies(dt);
-      this.updateProjectiles(dt);
-      this.updatePickups(dt);
+      this.updateEnemies(simDt);
+      this.updateProjectiles(simDt);
+      this.updatePickups(simDt);
       this.updatePuzzles();
-      this.updateParticles(dt);
-      this.updateAtmosphere(dt);
+      this.updateParticles(simDt);
+      this.updateAtmosphere(simDt);
 
       // Refresh HUD ~10 times/sec for smooth hearts/rupees/minimap
       this.hudTick += dt;
@@ -679,9 +901,9 @@
         const ny = hero.y + hero.thrownVy * dt;
         const blocked =
           nx < TS ||
-          nx > FB.VIEW_W - TS ||
+          nx > this.roomW - TS ||
           ny < TS ||
-          ny > FB.VIEW_H - TS ||
+          ny > this.roomH - TS ||
           this.isSolidAt(Math.floor(nx / TS), Math.floor(ny / TS), true);
         if (blocked) {
           hero.thrownTimer = 0;
@@ -1146,7 +1368,7 @@
       // 5. Lift adjacent Pot tile
       const pc = Math.floor((hero.x + dv.x * 13) / TS);
       const pr = Math.floor((hero.y + dv.y * 13) / TS);
-      if (pc >= 0 && pc < FB.ROOM_COLS && pr >= 0 && pr < FB.ROOM_ROWS) {
+      if (pc >= 0 && pc < this.roomCols && pr >= 0 && pr < this.roomRows) {
         if (this.room.grid[pr][pc] === T.POT) {
           this.room.grid[pr][pc] = this._floorTileForRoom(this.room, pc, pr, false);
           hero.carrying = { kind: 'pot', ref: null };
@@ -1253,7 +1475,7 @@
       const fy = hero.y + dv.y * 13;
       const col = Math.floor(fx / TS);
       const row = Math.floor(fy / TS);
-      if (col < 0 || col >= FB.ROOM_COLS || row < 0 || row >= FB.ROOM_ROWS) return false;
+      if (col < 0 || col >= this.roomCols || row < 0 || row >= this.roomRows) return false;
       const tile = this.room.grid[row][col];
 
       // Signpost
@@ -1439,10 +1661,12 @@
     }
 
     _findSafeTileNear(room, targetCol, targetRow) {
-      const clampC = Math.max(1, Math.min(FB.ROOM_COLS - 2, Math.round(targetCol)));
-      const clampR = Math.max(1, Math.min(FB.ROOM_ROWS - 2, Math.round(targetRow)));
+      const cols = room.cols || room.grid?.[0]?.length || FB.ROOM_COLS;
+      const rows = room.rows || room.grid?.length || FB.ROOM_ROWS;
+      const clampC = Math.max(1, Math.min(cols - 2, Math.round(targetCol)));
+      const clampR = Math.max(1, Math.min(rows - 2, Math.round(targetRow)));
       const isWalkable = (c, r) => {
-        if (c < 1 || c >= FB.ROOM_COLS - 1 || r < 1 || r >= FB.ROOM_ROWS - 1) return false;
+        if (c < 1 || c >= cols - 1 || r < 1 || r >= rows - 1) return false;
         const t = room.grid[r][c];
         return !FB.SOLID_TILES.has(t) && t !== T.PIT && t !== T.SPIKES;
       };
@@ -1456,7 +1680,7 @@
           }
         }
       }
-      return { col: 10, row: 7 };
+      return { col: Math.floor(cols / 2), row: Math.floor(rows / 2) };
     }
 
     useMagicMirror(hero) {
@@ -1513,7 +1737,7 @@
     }
 
     isSolidAt(col, row, flying = false) {
-      if (col < 0 || col >= FB.ROOM_COLS || row < 0 || row >= FB.ROOM_ROWS) return false;
+      if (col < 0 || col >= this.roomCols || row < 0 || row >= this.roomRows) return false;
       const tile = this.room.grid[row][col];
       if (flying) {
         return tile === T.DUNGEON_WALL || tile === T.STONE_WALL || tile === T.TREE;
@@ -1578,7 +1802,7 @@
     }
 
     handleHeroBump(hero, col, row, dirX, dirY, dt) {
-      if (col < 0 || col >= FB.ROOM_COLS || row < 0 || row >= FB.ROOM_ROWS) return;
+      if (col < 0 || col >= this.roomCols || row < 0 || row >= this.roomRows) return;
       const tile = this.room.grid[row][col];
 
       // Unlock Small Locked Door (Palace #1 or Frost Spire)
@@ -1651,7 +1875,7 @@
           hero.pushTimer = 0;
           const tc = col + dirX;
           const tr = row + dirY;
-          if (tc > 0 && tc < FB.ROOM_COLS - 1 && tr > 0 && tr < FB.ROOM_ROWS - 1) {
+          if (tc > 0 && tc < this.roomCols - 1 && tr > 0 && tr < this.roomRows - 1) {
             const dest = this.room.grid[tr][tc];
             if (
               dest === T.DUNGEON_FLOOR ||
@@ -1676,7 +1900,7 @@
                 while (true) {
                   const nc = finalC + dirX;
                   const nr = finalR + dirY;
-                  if (nc <= 0 || nc >= FB.ROOM_COLS - 1 || nr <= 0 || nr >= FB.ROOM_ROWS - 1) break;
+                  if (nc <= 0 || nc >= this.roomCols - 1 || nr <= 0 || nr >= this.roomRows - 1) break;
                   const nextTile = this.room.grid[nr][nc];
                   if (nextTile === T.SWITCH_FLOOR) {
                     finalC = nc;
@@ -1710,7 +1934,7 @@
 
     _doorDirForTile(col, row) {
       if (row === 0) return 'north';
-      if (row === FB.ROOM_ROWS - 1) return 'south';
+      if (row === this.roomRows - 1) return 'south';
       if (col === 0) return 'west';
       return 'east';
     }
@@ -1720,25 +1944,25 @@
       const col = Math.floor(hero.x / TS);
       const row = Math.floor(hero.y / TS);
 
-      // Room border transitions!
+      // Smooth Zelda-style Sliding-Camera Room Transitions!
       if (hero.y < 5 && this.room.exits?.north) {
-        this.enterRoom(this.room.exits.north, { col: 9.5, row: FB.ROOM_ROWS - 2 });
+        this.transitionToRoom('north', this.room.exits.north, hero);
         return;
       }
-      if (hero.y > FB.VIEW_H - 5 && this.room.exits?.south) {
-        this.enterRoom(this.room.exits.south, { col: 9.5, row: 1 });
+      if (hero.y > this.roomH - 5 && this.room.exits?.south) {
+        this.transitionToRoom('south', this.room.exits.south, hero);
         return;
       }
       if (hero.x < 5 && this.room.exits?.west) {
-        this.enterRoom(this.room.exits.west, { col: FB.ROOM_COLS - 2, row: 6.5 });
+        this.transitionToRoom('west', this.room.exits.west, hero);
         return;
       }
-      if (hero.x > FB.VIEW_W - 5 && this.room.exits?.east) {
-        this.enterRoom(this.room.exits.east, { col: 1, row: 6.5 });
+      if (hero.x > this.roomW - 5 && this.room.exits?.east) {
+        this.transitionToRoom('east', this.room.exits.east, hero);
         return;
       }
 
-      if (col < 0 || col >= FB.ROOM_COLS || row < 0 || row >= FB.ROOM_ROWS) return;
+      if (col < 0 || col >= this.roomCols || row < 0 || row >= this.roomRows) return;
       const tile = this.room.grid[row][col];
 
       // Safe ground tracking
@@ -1822,9 +2046,9 @@
 
       // Hit tiles (Bushes, Pots, Crystal Switches)
       const minC = Math.max(0, Math.floor((cx - reach) / TS));
-      const maxC = Math.min(FB.ROOM_COLS - 1, Math.floor((cx + reach) / TS));
+      const maxC = Math.min(this.roomCols - 1, Math.floor((cx + reach) / TS));
       const minR = Math.max(0, Math.floor((cy - reach) / TS));
-      const maxR = Math.min(FB.ROOM_ROWS - 1, Math.floor((cy + reach) / TS));
+      const maxR = Math.min(this.roomRows - 1, Math.floor((cy + reach) / TS));
 
       for (let r = minR; r <= maxR; r++) {
         for (let c = minC; c <= maxC; c++) {
@@ -2000,8 +2224,8 @@
     flipCrystalSwitch() {
       this.room.crystalState = this.room.crystalState === 'blue' ? 'red' : 'blue';
       FB.audio.play('switch');
-      for (let r = 0; r < FB.ROOM_ROWS; r++) {
-        for (let c = 0; c < FB.ROOM_COLS; c++) {
+      for (let r = 0; r < this.roomRows; r++) {
+        for (let c = 0; c < this.roomCols; c++) {
           const t = this.room.grid[r][c];
           if (t === T.CRYSTAL_BLUE) this.room.grid[r][c] = T.CRYSTAL_RED;
           else if (t === T.CRYSTAL_RED) this.room.grid[r][c] = T.CRYSTAL_BLUE;
@@ -2022,6 +2246,22 @@
         if (e.hurtTimer > 0) e.hurtTimer -= dt;
         if (e.parryCooldown > 0) e.parryCooldown -= dt;
         if (e.attackCooldown > 0) e.attackCooldown -= dt;
+
+        // Ember Rod Burn DoT ticking!
+        if (e.burnTimer > 0) {
+          e.burnTimer -= dt;
+          e.burnTick -= dt;
+          if (Math.random() < 0.25) {
+            this.spawnParticles(e.x, e.y - 4, '#fb923c', 1, 22, { shape: 'spark', life: 0.22 });
+          }
+          if (e.burnTick <= 0) {
+            e.burnTick = 0.65;
+            e.hit(1, e.x, e.y, e.burnOwner || this.humanHeroes[0], this, { isBurn: true, ignoreOrbs: true });
+            this.addFloatingText(e.x, e.y - 10, 'BURN', '#fb923c');
+            if (!e.alive) continue;
+          }
+        }
+
         if (e.stunTimer > 0) {
           e.stunTimer -= dt;
           e.telegraphTimer = 0;
@@ -2223,8 +2463,8 @@
 
       for (let i = 0; i < slots; i++) {
         const ang = (boss.lookAngle || 0) + (i === 0 ? 1.15 : -1.15) + (Math.random() - 0.5) * 0.5;
-        const sx = Math.max(TS * 2.5, Math.min(FB.VIEW_W - TS * 2.5, boss.x + Math.cos(ang) * 34));
-        const sy = Math.max(TS * 2.5, Math.min(FB.VIEW_H - TS * 2.5, boss.y + Math.sin(ang) * 34));
+        const sx = Math.max(TS * 2.5, Math.min(this.roomW - TS * 2.5, boss.x + Math.cos(ang) * 34));
+        const sy = Math.max(TS * 2.5, Math.min(this.roomH - TS * 2.5, boss.y + Math.sin(ang) * 34));
 
         let mType = 'keese';
         if (boss.phase === 2) {
@@ -2286,8 +2526,8 @@
         // Glide rapidly circling player
         const ang = Math.atan2(target.y - b.y, target.x - b.x) + 0.55;
         const spd = (b.phase === 2 ? 66 : 48) * hmMult;
-        b.x = Math.max(TS * 2.5, Math.min(FB.VIEW_W - TS * 2.5, b.x + Math.cos(ang) * spd * dt));
-        b.y = Math.max(TS * 2.5, Math.min(FB.VIEW_H - TS * 2.5, b.y + Math.sin(ang) * spd * dt));
+        b.x = Math.max(TS * 2.5, Math.min(this.roomW - TS * 2.5, b.x + Math.cos(ang) * spd * dt));
+        b.y = Math.max(TS * 2.5, Math.min(this.roomH - TS * 2.5, b.y + Math.sin(ang) * spd * dt));
 
         if (b.stateTimer <= 0) {
           // Fire radial dark energy spread!
@@ -2317,8 +2557,8 @@
           b.dashVy = Math.sin(b.lookAngle) * dashSpd;
         }
       } else if (b.bossState === 'dash') {
-        b.x = Math.max(TS * 2.2, Math.min(FB.VIEW_W - TS * 2.2, b.x + b.dashVx * dt));
-        b.y = Math.max(TS * 2.2, Math.min(FB.VIEW_H - TS * 2.2, b.y + b.dashVy * dt));
+        b.x = Math.max(TS * 2.2, Math.min(this.roomW - TS * 2.2, b.x + b.dashVx * dt));
+        b.y = Math.max(TS * 2.2, Math.min(this.roomH - TS * 2.2, b.y + b.dashVy * dt));
         if (b.stateTimer <= 0) {
           b.bossState = 'orbit';
           b.stateTimer = b.phase === 2 ? 1.25 : 1.75;
@@ -2344,8 +2584,8 @@
         // Serpentine glide across the glacial crown
         const baseAng = b.lookAngle + Math.sin(b.weavePhase) * 0.82;
         const spd = (b.phase === 2 ? 82 : 58) * hmMult;
-        b.x = Math.max(TS * 2.2, Math.min(FB.VIEW_W - TS * 2.2, b.x + Math.cos(baseAng) * spd * dt));
-        b.y = Math.max(TS * 2.2, Math.min(FB.VIEW_H - TS * 2.2, b.y + Math.sin(baseAng) * spd * dt));
+        b.x = Math.max(TS * 2.2, Math.min(this.roomW - TS * 2.2, b.x + Math.cos(baseAng) * spd * dt));
+        b.y = Math.max(TS * 2.2, Math.min(this.roomH - TS * 2.2, b.y + Math.sin(baseAng) * spd * dt));
 
         if (b.stateTimer <= 0) {
           // Fire wider spread of reflectable Ice Shards, then telegraph a frost charge!
@@ -2383,8 +2623,8 @@
           this.spawnRing(b.x, b.y, '#7dd3fc', 24, 0.24);
         }
       } else if (b.bossState === 'charge') {
-        b.x = Math.max(TS * 2.0, Math.min(FB.VIEW_W - TS * 2.0, b.x + b.dashVx * dt));
-        b.y = Math.max(TS * 2.0, Math.min(FB.VIEW_H - TS * 2.0, b.y + b.dashVy * dt));
+        b.x = Math.max(TS * 2.0, Math.min(this.roomW - TS * 2.0, b.x + b.dashVx * dt));
+        b.y = Math.max(TS * 2.0, Math.min(this.roomH - TS * 2.0, b.y + b.dashVy * dt));
         if (Math.random() < 0.45) {
           this.spawnParticles(b.x, b.y, '#bae6fd', 1, 24, { shape: 'dust', life: 0.22, size: 2.4 });
         }
@@ -2444,16 +2684,20 @@
 
     onBossDefeated(boss) {
       this.bossDefeated = true;
+      this.slowMoTimer = 0.55;
       this._clearSummonedMinions('#d8b4fe');
       this.screenShake = 8;
       FB.audio.play('victory');
+      this.spawnRing(boss.x, boss.y, '#a855f7', 40, 0.45);
       this.spawnParticles(boss.x, boss.y, '#fde047', 28, 110);
       this.spawnParticles(boss.x, boss.y, '#a855f7', 20, 90);
       this.spawnPickup('heart_container', boss.x, boss.y + 12);
 
       // Reveal Triforce Victory Altar in center!
-      this.room.grid[6][9] = T.TRIFORCE_ALTAR;
-      this.room.grid[6][10] = T.TRIFORCE_ALTAR;
+      const midR = Math.floor(this.roomRows / 2);
+      const midC = Math.floor(this.roomCols / 2);
+      this.room.grid[midR][midC - 1] = T.TRIFORCE_ALTAR;
+      this.room.grid[midR][midC] = T.TRIFORCE_ALTAR;
       this._openDoorTiles(this.room, 'south');
       this.saveProgress();
       this.showToast('VAALOR DEFEATED! Step onto the Golden Relic Altar to claim the Magic Mirror!', 6.0);
@@ -2461,6 +2705,7 @@
 
     onFrostBossDefeated(boss) {
       this.frostBossDefeated = true;
+      this.slowMoTimer = 0.55;
       this._clearSummonedMinions('#bae6fd');
       this.screenShake = 9;
       FB.audio.play('victory');
@@ -2469,12 +2714,14 @@
       this.spawnParticles(boss.x, boss.y, '#fde047', 24, 100);
       this.spawnPickup('heart_container', boss.x, boss.y + 14);
 
-      // Reveal Final Triforce Victory Altar in center!
-      this.room.grid[6][9] = T.TRIFORCE_ALTAR;
-      this.room.grid[6][10] = T.TRIFORCE_ALTAR;
+      // Reveal Relic Altar in center!
+      const midR = Math.floor(this.roomRows / 2);
+      const midC = Math.floor(this.roomCols / 2);
+      this.room.grid[midR][midC - 1] = T.TRIFORCE_ALTAR;
+      this.room.grid[midR][midC] = T.TRIFORCE_ALTAR;
       this._openDoorTiles(this.room, 'south');
       this.saveProgress();
-      this.showToast('GLACIOR SHATTERED! Step onto the Golden Relic Altar to complete the Grand Quest!', 6.5);
+      this.showToast('GLACIOR SHATTERED! Step onto the Golden Relic Altar to claim the Frost Medallion!', 6.5);
     }
 
     triggerVictory() {
@@ -2504,7 +2751,7 @@
 
       const blockedX =
         nx < TS * 1.2 ||
-        nx > FB.VIEW_W - TS * 1.2 ||
+        nx > this.roomW - TS * 1.2 ||
         this.isSolidAt(Math.floor((nx - half) / TS), Math.floor(e.y / TS), e.flying) ||
         this.isSolidAt(Math.floor((nx + half) / TS), Math.floor(e.y / TS), e.flying);
       if (!blockedX) {
@@ -2514,7 +2761,7 @@
 
       const blockedY =
         ny < TS * 1.2 ||
-        ny > FB.VIEW_H - TS * 1.2 ||
+        ny > this.roomH - TS * 1.2 ||
         this.isSolidAt(Math.floor(e.x / TS), Math.floor((ny - half) / TS), e.flying) ||
         this.isSolidAt(Math.floor(e.x / TS), Math.floor((ny + half) / TS), e.flying);
       if (!blockedY) {
@@ -2539,9 +2786,9 @@
             const r = Math.floor(ny / TS);
             if (
               nx > TS &&
-              nx < FB.VIEW_W - TS &&
+              nx < this.roomW - TS &&
               ny > TS &&
-              ny < FB.VIEW_H - TS &&
+              ny < this.roomH - TS &&
               !FB.PROJECTILE_BLOCK_TILES.has(this.room.grid[r]?.[c])
             ) {
               p.x = nx;
@@ -2639,9 +2886,9 @@
             }
             if (
               p.x < 6 ||
-              p.x > FB.VIEW_W - 6 ||
+              p.x > this.roomW - 6 ||
               p.y < 6 ||
-              p.y > FB.VIEW_H - 6 ||
+              p.y > this.roomH - 6 ||
               FB.PROJECTILE_BLOCK_TILES.has(htile)
             ) {
               FB.audio.play('clink');
@@ -2716,7 +2963,7 @@
         }
 
         // Bounds check
-        if (p.x < 4 || p.x > FB.VIEW_W - 4 || p.y < 4 || p.y > FB.VIEW_H - 4) {
+        if (p.x < 4 || p.x > this.roomW - 4 || p.y < 4 || p.y > this.roomH - 4) {
           if (p.kind === 'boomerang') p.returning = true;
           else {
             if (p.kind === 'thrown_pot') {
@@ -2733,7 +2980,7 @@
         // Tile interaction
         const col = Math.floor(p.x / TS);
         const row = Math.floor(p.y / TS);
-        if (col >= 0 && col < FB.ROOM_COLS && row >= 0 && row < FB.ROOM_ROWS) {
+        if (col >= 0 && col < this.roomCols && row >= 0 && row < this.roomRows) {
           const tile = this.room.grid[row][col];
 
           if (!p.fromEnemy && (tile === T.CRYSTAL_BLUE || tile === T.CRYSTAL_RED)) {
@@ -2882,9 +3129,9 @@
 
       // Blast cracked walls, cracked boulders, bushes, pots, crystal switches!
       const minC = Math.max(0, Math.floor((bomb.x - blastRadius) / TS));
-      const maxC = Math.min(FB.ROOM_COLS - 1, Math.floor((bomb.x + blastRadius) / TS));
+      const maxC = Math.min(this.roomCols - 1, Math.floor((bomb.x + blastRadius) / TS));
       const minR = Math.max(0, Math.floor((bomb.y - blastRadius) / TS));
-      const maxR = Math.min(FB.ROOM_ROWS - 1, Math.floor((bomb.y + blastRadius) / TS));
+      const maxR = Math.min(this.roomRows - 1, Math.floor((bomb.y + blastRadius) / TS));
 
       let discoveredSecret = false;
       for (let r = minR; r <= maxR; r++) {
@@ -3038,8 +3285,8 @@
         // Every SWITCH_FLOOR tile must be either SWITCH_FLOOR_ON (block locked) or have a hero/clone standing on it!
         let totalSwitches = 0;
         let activeSwitches = 0;
-        for (let r = 0; r < FB.ROOM_ROWS; r++) {
-          for (let c = 0; c < FB.ROOM_COLS; c++) {
+        for (let r = 0; r < this.roomRows; r++) {
+          for (let c = 0; c < this.roomCols; c++) {
             const tile = this.room.grid[r][c];
             if (tile === T.SWITCH_FLOOR_ON) {
               totalSwitches++;
@@ -3064,8 +3311,8 @@
         }
       } else if (puz.type === 'torches') {
         let unlit = 0;
-        for (let r = 0; r < FB.ROOM_ROWS; r++) {
-          for (let c = 0; c < FB.ROOM_COLS; c++) {
+        for (let r = 0; r < this.roomRows; r++) {
+          for (let c = 0; c < this.roomCols; c++) {
             if (this.room.grid[r][c] === T.TORCH_UNLIT) unlit++;
           }
         }
@@ -3118,15 +3365,17 @@
 
     _computeRoomHash(room) {
       if (!room || !room.grid) return '';
+      const rows = room.grid.length;
+      const cols = room.grid[0]?.length || 0;
       let h = 2166136261;
-      for (let r = 0; r < FB.ROOM_ROWS; r++) {
+      for (let r = 0; r < rows; r++) {
         const row = room.grid[r];
-        for (let c = 0; c < FB.ROOM_COLS; c++) {
+        for (let c = 0; c < cols; c++) {
           h ^= row[c];
           h = Math.imul(h, 16777619);
         }
       }
-      return `${room.id}:${room.area}:${h >>> 0}`;
+      return `${room.id}:${room.area}:${cols}x${rows}:${h >>> 0}`;
     }
 
     initRoomAtmosphere(room) {
@@ -3298,60 +3547,52 @@
       ctx.restore();
     }
 
-    render() {
-      const ctx = this.ctx;
+    _renderRoomWorld(ctx, offsetX = 0, offsetY = 0) {
       const S = FB.HI_RES_SCALE || 2;
+      const room = this.room;
+      if (!room) return;
+
+      const camOffX = Math.round(-this.camX * S + offsetX);
+      const camOffY = Math.round(-this.camY * S + offsetY);
+
       ctx.save();
-      ctx.imageSmoothingEnabled = false;
-      const area = this.room ? this.room.area : 'overworld';
-      ctx.fillStyle =
-        area === 'dungeon'
-          ? '#1c2840'
-          : area === 'frost'
-            ? '#0e263d'
-            : area === 'darkworld'
-              ? '#241733'
-              : area === 'shop'
-                ? '#52331b'
-                : '#1b5929';
-      ctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
+      ctx.translate(camOffX, camOffY);
 
-      // Integer-snapped Hi-Bit screen shake so tiles never show subpixel grid seams
-      if (this.screenShake > 0.2) {
-        const sx = Math.round((Math.random() - 0.5) * this.screenShake * S);
-        const sy = Math.round((Math.random() - 0.5) * this.screenShake * S);
-        ctx.translate(sx, sy);
-      }
-
-      // 1. Pre-Baked Hi-Bit 640x416 Room Terrain (auto-tiles + biome masonry + 2.5D cast shadows)
-      if (this.room && FB.hiTiles) {
+      // 1. Pre-Baked Hi-Bit Room Terrain (dynamically sized cols*32 x rows*32)
+      if (FB.hiTiles) {
+        const bw = this.roomCols * 32;
+        const bh = this.roomRows * 32;
         if (!this.roomCanvas && typeof document !== 'undefined') {
           this.roomCanvas = document.createElement('canvas');
-          this.roomCanvas.width = FB.RENDER_W;
-          this.roomCanvas.height = FB.RENDER_H;
+          this.roomCanvas.width = bw;
+          this.roomCanvas.height = bh;
           this.roomCtx = this.roomCanvas.getContext('2d');
+        } else if (this.roomCanvas && (this.roomCanvas.width !== bw || this.roomCanvas.height !== bh)) {
+          this.roomCanvas.width = bw;
+          this.roomCanvas.height = bh;
+          this.roomCacheKey = null;
         }
-        const key = this._computeRoomHash(this.room);
+        const key = this._computeRoomHash(room);
         if (this.roomCtx && key !== this.roomCacheKey) {
-          FB.hiTiles.bakeRoom(this.roomCtx, this.room);
+          FB.hiTiles.bakeRoom(this.roomCtx, room);
           this.roomCacheKey = key;
         }
         if (this.roomCanvas) {
           ctx.drawImage(this.roomCanvas, 0, 0);
         }
-        // Live animated tile accents (shore ripples, swaying flowers, torch flames, portals, ice glints)
-        FB.hiTiles.drawAnimatedTileAccents(ctx, this.room, this.time);
+        // Live animated tile accents with camera culling
+        FB.hiTiles.drawAnimatedTileAccents(ctx, room, this.time, this.camX, this.camY);
       }
 
       // 1b. Render Shop Pedestal Goods
-      if (this.room && this.room.shopItems) {
-        for (const s of this.room.shopItems) {
+      if (room.shopItems) {
+        for (const s of room.shopItems) {
           const cat = FB.SHOP_CATALOG.find((c) => c.id === s.catalogId);
           if (cat) FB.sprites.drawShopItem(ctx, s.col, s.row, cat, this.time);
         }
       }
 
-      // 2. Render Pickups (native 640x416)
+      // 2. Render Pickups (native 2x world coords)
       for (const item of this.pickups) {
         FB.sprites.drawPickup(ctx, item, this.time);
       }
@@ -3374,7 +3615,7 @@
         this.renderProjectile(ctx, p);
       }
 
-      // 5. Render Rich Shaped Particles & Floating Text (640x416)
+      // 5. Render Rich Shaped Particles in world space
       for (const pt of this.particles) {
         const ratio = Math.max(0, pt.life / pt.maxLife);
         const px = Math.round(pt.x * S);
@@ -3422,10 +3663,7 @@
       }
       ctx.globalAlpha = 1;
 
-      // 5b. Living World Biome Atmosphere (sunbeams, butterflies, snow, twilight spores, lantern glow)
-      this.renderAtmosphere(ctx);
-
-      // 5c. Crisp Hi-Bit Floating Combat / Loot Text
+      // 5c. Crisp Hi-Bit Floating Combat / Loot Text in world space
       ctx.font = 'bold 13px monospace';
       ctx.textAlign = 'center';
       for (const ft of this.floatingTexts) {
@@ -3439,7 +3677,69 @@
       }
       ctx.globalAlpha = 1;
 
-      // 6. Hi-Bit 640x416 Dynamic Darkness & Warm Torch Lighting Pass (Pitch-Black Vault!)
+      ctx.restore();
+    }
+
+    render() {
+      const ctx = this.ctx;
+      const S = FB.HI_RES_SCALE || 2;
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      const area = this.room ? this.room.area : 'overworld';
+      ctx.fillStyle =
+        area === 'dungeon'
+          ? '#121a2d'
+          : area === 'frost'
+            ? '#0a1c2e'
+            : area === 'darkworld'
+              ? '#1b1026'
+              : area === 'shop'
+                ? '#3b2413'
+                : area === 'desert' || area === 'desert_dungeon'
+                  ? '#4a3216'
+                  : area === 'mountain' || area === 'magma'
+                    ? '#261414'
+                    : '#133d1d';
+      ctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
+
+      // Integer-snapped Hi-Bit screen shake so tiles never show subpixel grid seams
+      if (this.screenShake > 0.2 && !this.slideTrans) {
+        const sx = Math.round((Math.random() - 0.5) * this.screenShake * S);
+        const sy = Math.round((Math.random() - 0.5) * this.screenShake * S);
+        ctx.translate(sx, sy);
+      }
+
+      // Authentic Zelda ALttP / Minish Cap Sliding-Camera Room Transition!
+      if (this.slideTrans && this.prevViewCanvas) {
+        const rawT = Math.max(0, Math.min(1, this.slideTrans.timer / this.slideTrans.duration));
+        const p = 1 - Math.pow(1 - rawT, 3); // Ease-out cubic
+        let outX = 0;
+        let outY = 0;
+        let inX = 0;
+        let inY = 0;
+        if (this.slideTrans.dir === 'east') {
+          outX = -p * FB.RENDER_W;
+          inX = (1 - p) * FB.RENDER_W;
+        } else if (this.slideTrans.dir === 'west') {
+          outX = p * FB.RENDER_W;
+          inX = -(1 - p) * FB.RENDER_W;
+        } else if (this.slideTrans.dir === 'south') {
+          outY = -p * FB.RENDER_H;
+          inY = (1 - p) * FB.RENDER_H;
+        } else if (this.slideTrans.dir === 'north') {
+          outY = p * FB.RENDER_H;
+          inY = -(1 - p) * FB.RENDER_H;
+        }
+        ctx.drawImage(this.prevViewCanvas, Math.round(outX), Math.round(outY));
+        this._renderRoomWorld(ctx, Math.round(inX), Math.round(inY));
+      } else {
+        this._renderRoomWorld(ctx, 0, 0);
+      }
+
+      // 5b. Living World Biome Atmosphere (screen-space sunbeams, butterflies, snow, twilight spores, lantern glow)
+      this.renderAtmosphere(ctx);
+
+      // 6. Hi-Bit 640x416 Camera-Shifted Dynamic Darkness & Warm Torch Lighting Pass
       if (this.room && this.room.isDark && !this.room.puzzleSolved) {
         if (!this.darkCanvas && typeof document !== 'undefined') {
           this.darkCanvas = document.createElement('canvas');
@@ -3456,6 +3756,7 @@
 
           dctx.globalCompositeOperation = 'destination-out';
           const punchLight = (lx, ly, rad) => {
+            if (lx < -rad || lx > FB.RENDER_W + rad || ly < -rad || ly > FB.RENDER_H + rad) return;
             const g = dctx.createRadialGradient(lx, ly, rad * 0.18, lx, ly, rad);
             g.addColorStop(0, 'rgba(0, 0, 0, 1)');
             g.addColorStop(0.68, 'rgba(0, 0, 0, 0.75)');
@@ -3468,25 +3769,46 @@
 
           const flicker = Math.sin(this.time * 12) * 5;
           for (const h of this.allHeroes) {
-            if (!h.downed) punchLight(Math.round(h.x * S), Math.round(h.y * S), 96 + flicker * 0.5);
+            if (!h.downed) {
+              punchLight(
+                Math.round((h.x - this.camX) * S),
+                Math.round((h.y - this.camY) * S),
+                96 + flicker * 0.5
+              );
+            }
           }
-          for (let r = 0; r < FB.ROOM_ROWS; r++) {
-            for (let c = 0; c < FB.ROOM_COLS; c++) {
+          for (let r = 0; r < this.roomRows; r++) {
+            for (let c = 0; c < this.roomCols; c++) {
               if (this.room.grid[r][c] === T.TORCH_LIT) {
-                punchLight(c * 32 + 16, r * 32 + 16, 126 + flicker);
+                punchLight(
+                  Math.round((c * TS + 8 - this.camX) * S),
+                  Math.round((r * TS + 8 - this.camY) * S),
+                  126 + flicker
+                );
               }
             }
           }
           for (const p of this.projectiles) {
             if (p.kind === 'fireball' || p.kind === 'beam') {
-              punchLight(Math.round(p.x * S), Math.round(p.y * S), 78);
+              punchLight(
+                Math.round((p.x - this.camX) * S),
+                Math.round((p.y - this.camY) * S),
+                78
+              );
             }
           }
           dctx.globalCompositeOperation = 'source-over';
           ctx.drawImage(this.darkCanvas, 0, 0);
         }
-      } else if (this.room && (area === 'dungeon' || area === 'frost' || area === 'darkworld')) {
-        // Subtle atmospheric dungeon / spire / twilight vignette
+      } else if (
+        this.room &&
+        (area === 'dungeon' ||
+          area === 'frost' ||
+          area === 'darkworld' ||
+          area === 'desert_dungeon' ||
+          area === 'magma')
+      ) {
+        // Subtle atmospheric dungeon / spire / twilight / temple vignette
         const grad = ctx.createRadialGradient(
           FB.RENDER_W / 2,
           FB.RENDER_H / 2,
@@ -3502,13 +3824,17 @@
             ? 'rgba(8, 28, 48, 0.34)'
             : area === 'darkworld'
               ? 'rgba(24, 8, 36, 0.30)'
-              : 'rgba(6, 10, 20, 0.36)'
+              : area === 'magma'
+                ? 'rgba(42, 10, 6, 0.34)'
+                : area === 'desert_dungeon'
+                  ? 'rgba(38, 22, 8, 0.32)'
+                  : 'rgba(6, 10, 20, 0.36)'
         );
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
       }
 
-      // Room transition fade
+      // Room transition fade (for portals / Magic Mirror / stairs)
       if (this.transitionOverlayAlpha > 0) {
         ctx.fillStyle = `rgba(8, 11, 20, ${this.transitionOverlayAlpha})`;
         ctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
