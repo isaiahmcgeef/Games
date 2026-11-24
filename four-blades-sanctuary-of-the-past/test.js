@@ -32,6 +32,8 @@ const scriptOrder = [
   'maps-palace.js',
   'maps-darkworld.js',
   'maps-frost.js',
+  'maps-desert-dungeon.js',
+  'maps-magma-dungeon.js',
   'entities.js',
   'ui.js',
   'game.js',
@@ -640,7 +642,45 @@ assert(vHero.hp === vHero.maxHp, 'Emberwatch Hot Spring restores full hearts');
 FB.saves.deleteSlot(2);
 console.log('[PASS] Phase 3 Expansion: 3 Biome Villages, 6 Village Upgrades, Thin/Wide Biomes & 8 Heart Pieces');
 
-// 14. Visit & render every room in the world at Hi-Bit 640x416
+// 14. Phase 4 Expansion: Dungeon #3 Sunspire Desert Temple + Dungeon #4 Magma Citadel + 4-Medallion Quest
+assert(Object.keys(g.rooms).length >= 51, `Expected >= 51 total rooms after Phase 4, got ${Object.keys(g.rooms).length}`);
+assert(g.rooms.ds_corridor.cols === 12 && g.rooms.ds_corridor.rows === 22, 'Sunspire Beamos Colonnade is 12x22 thin vertical dungeon room');
+assert(g.rooms.mg_catwalk.cols === 34 && g.rooms.mg_catwalk.rows === 11, 'Magma Molten Catwalk is 34x11 thin horizontal lava bridge');
+
+g.startNewGame(1, { slotIndex: 2, heroMode: false });
+g.bossDefeated = true;
+g.frostBossDefeated = true;
+
+// Test Sunspire Desert Boss (Solkar) combat, minion summoning, and Medallion return
+g.enterRoom('ds_boss', { col: 12, row: 12 });
+const solkar = g.enemies.find((e) => e.type === 'desert_boss');
+assert(!!solkar && solkar.maxHp >= 74, 'Solar Sentinel Solkar spawned in Sunspire Sanctum');
+solkar.summonTimer = 0.05;
+g.updateEnemies(0.1);
+assert(g.enemies.some((e) => e.alive && e.isSummoned), 'Solkar summoned Desert minions');
+solkar.hurtTimer = 0;
+solkar.hit(999, 100, 100, g.humanHeroes[0], g, {});
+assert(!solkar.alive && g.desertBossDefeated === true, 'Solar Sentinel Solkar defeated');
+g.claimSovereignMedallion('desert');
+assert(g.state === 'playing' && g.room.id === 'ow_haven', '3/4 Medallions returns hero to Sanctuary Haven (open world continues)');
+
+// Test Magma Citadel Boss (Ignis Rex) combat, minion summoning, and 4/4 Medallion Grand Victory!
+g.enterRoom('mg_boss', { col: 12, row: 12 });
+const ignis = g.enemies.find((e) => e.type === 'magma_boss');
+assert(!!ignis && ignis.maxHp >= 86, 'Forge Titan Ignis Rex spawned in Heart of the Caldera');
+ignis.summonTimer = 0.05;
+g.updateEnemies(0.1);
+assert(g.enemies.some((e) => e.alive && e.isSummoned), 'Ignis Rex summoned Magma minions');
+ignis.hurtTimer = 0;
+ignis.hit(999, 100, 100, g.humanHeroes[0], g, {});
+assert(!ignis.alive && g.magmaBossDefeated === true, 'Forge Titan Ignis Rex defeated');
+g.claimSovereignMedallion('magma');
+assert(g.state === 'victory', 'All 4 Sovereign Medallions united -> Grand Victory!');
+assert(FB.saves.getMeta().bossRushUnlocked === true, '4-Medallion Grand Victory unlocks Four Sovereigns Boss Rush!');
+FB.saves.deleteSlot(2);
+console.log('[PASS] Phase 4 Expansion: Sunspire Temple (Solkar), Magma Citadel (Ignis Rex) & 4-Medallion Grand Victory');
+
+// 15. Visit & render every room in the world at Hi-Bit 640x416
 for (const id of Object.keys(g.rooms)) {
   const r = g.rooms[id];
   g.enterRoom(id, { col: Math.floor((r.cols || 20) / 2), row: Math.floor((r.rows || 13) / 2) });

@@ -1219,6 +1219,14 @@
         case 'frost_boss':
           this._drawFrostBoss(ctx, e, time, flash);
           break;
+
+        case 'desert_boss':
+          this._drawDesertBoss(ctx, e, time, flash);
+          break;
+
+        case 'magma_boss':
+          this._drawMagmaBoss(ctx, e, time, flash);
+          break;
       }
 
       // Burning Ember Rod flame flicker aura
@@ -1264,6 +1272,111 @@
         }
       }
 
+      ctx.restore();
+    }
+
+    _drawDesertBoss(ctx, b, time, flash) {
+      // Solar Sentinel Solkar — Hi-Bit 64x64 Golden Sun-Disc Golem!
+      const cx = b.x * S;
+      const cy = b.y * S + Math.sin(time * 5) * 5;
+      const enraged = b.phase === 2;
+      ctx.save();
+
+      // Rotating radiant golden sun corona blades
+      const rayCount = enraged ? 10 : 8;
+      const baseRot = (b.sunAngle || time * 2);
+      for (let i = 0; i < rayCount; i++) {
+        const a = baseRot + (i * Math.PI * 2) / rayCount;
+        const rx = Math.round(cx + Math.cos(a) * 34);
+        const ry = Math.round(cy + Math.sin(a) * 34);
+        ctx.fillStyle = OUTLINE;
+        ctx.fillRect(rx - 6, ry - 6, 12, 12);
+        ctx.fillStyle = enraged ? '#f97316' : '#f59e0b';
+        ctx.fillRect(rx - 5, ry - 5, 10, 10);
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(rx - 2, ry - 2, 4, 4);
+      }
+
+      // Carved sandstone & gilded sun core
+      ctx.fillStyle = OUTLINE;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 26, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = flash ? '#ffffff' : '#b45309';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = flash ? '#ffffff' : '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ancient Pharaoh crest & glowing solar eye
+      ctx.fillStyle = '#1c1917';
+      ctx.fillRect(cx - 12, cy - 6, 24, 12);
+      const ex = cx + Math.cos(b.lookAngle || 0) * 5;
+      const ey = cy + Math.sin(b.lookAngle || 0) * 3;
+      ctx.fillStyle = enraged ? '#ef4444' : '#fde047';
+      ctx.fillRect(Math.round(ex) - 6, Math.round(ey) - 4, 12, 8);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(Math.round(ex) - 2, Math.round(ey) - 2, 4, 4);
+      ctx.restore();
+    }
+
+    _drawMagmaBoss(ctx, b, time, flash) {
+      // Forge Titan Ignis Rex — Hi-Bit 64x64 Obsidian & Molten Gold Colossus!
+      const stomp = Math.sin(time * 7) * 3;
+      const cx = b.x * S;
+      const cy = b.y * S + stomp;
+      const enraged = b.phase === 2;
+      ctx.save();
+
+      // Glowing magma furnace aura
+      ctx.fillStyle = enraged ? 'rgba(239, 68, 68, 0.34)' : 'rgba(249, 115, 22, 0.28)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 38 + Math.sin(time * 8) * 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Massive armored obsidian shoulders & torso
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(cx - 28, cy - 22, 56, 46);
+      ctx.fillStyle = flash ? '#ffffff' : '#291a1c';
+      ctx.fillRect(cx - 26, cy - 20, 52, 42);
+      // Molten lava cracks across obsidian plate
+      ctx.fillStyle = enraged ? '#fde047' : '#f97316';
+      ctx.fillRect(cx - 22, cy - 8, 44, 4);
+      ctx.fillRect(cx - 4, cy - 16, 8, 32);
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(cx - 2, cy - 10, 4, 16);
+
+      // Crowned horned volcanic helm
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(cx - 18, cy - 32, 36, 16);
+      ctx.fillRect(cx - 26, cy - 36, 9, 12);
+      ctx.fillRect(cx + 17, cy - 36, 9, 12);
+      ctx.fillStyle = flash ? '#ffffff' : '#4a2529';
+      ctx.fillRect(cx - 16, cy - 30, 32, 13);
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(cx - 24, cy - 34, 5, 8);
+      ctx.fillRect(cx + 19, cy - 34, 5, 8);
+      // Blazing eyes
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(cx - 10, cy - 25, 6, 4);
+      ctx.fillRect(cx + 4, cy - 25, 6, 4);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(cx - 8, cy - 24, 3, 2);
+      ctx.fillRect(cx + 5, cy - 24, 3, 2);
+
+      // Massive Volcanic War Hammer swung at side!
+      const swing = b.bossState === 'slam' ? -18 : Math.sin(time * 5) * 6;
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(cx + 22, cy - 18 + swing, 14, 34);
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(cx + 26, cy - 4 + swing, 6, 20);
+      ctx.fillStyle = enraged ? '#f97316' : '#dc2626';
+      ctx.fillRect(cx + 20, cy - 20 + swing, 18, 14);
+      ctx.fillStyle = '#fde047';
+      ctx.fillRect(cx + 23, cy - 17 + swing, 12, 4);
       ctx.restore();
     }
 

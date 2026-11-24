@@ -381,7 +381,10 @@
         north: { target: 'ow_haven', targetCol: 17, targetRow: 20 },
         west: { target: 'ow_oasis', targetCol: 22, targetRow: 8 },
       },
-      portals: [],
+      portals: [
+        { col: 28, row: 7, targetRoom: 'ds_entry', targetCol: 9, targetRow: 10 },
+        { col: 29, row: 7, targetRoom: 'ds_entry', targetCol: 10, targetRow: 10 },
+      ],
       grid: parseGrid(
         makeRows(36, [
           'nnnnnnnnnnnnnnnnjjnnnnnnnnnnnnnnnnnn',
@@ -574,7 +577,12 @@
         south: { target: 'ow_mountain_ascent', targetCol: 7, targetRow: 1 },
         east: { target: 'ow_emberwatch', targetCol: 1, targetRow: 8 },
       },
-      portals: [],
+      portals: [
+        { col: 14, row: 1, targetRoom: 'mg_entry', targetCol: 9, targetRow: 10 },
+        { col: 15, row: 1, targetRoom: 'mg_entry', targetCol: 10, targetRow: 10 },
+        { col: 14, row: 2, targetRoom: 'mg_entry', targetCol: 9, targetRow: 10 },
+        { col: 15, row: 2, targetRoom: 'mg_entry', targetCol: 10, targetRow: 10 },
+      ],
       grid: parseGrid(
         makeRows(34, [
           'JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ',

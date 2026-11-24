@@ -348,6 +348,37 @@
             r: Math.max(5, 11 - i),
           }));
           break;
+        case 'desert_boss':
+          this.w = 30;
+          this.h = 30;
+          this.maxHp = Math.round(74 * scale);
+          this.speed = 62;
+          this.damage = 3;
+          this.flying = true;
+          this.phase = 1;
+          this.bossState = 'orbit';
+          this.stateTimer = 1.6;
+          this.summonTimer = 4.4;
+          this.lookAngle = Math.PI / 2;
+          this.dashVx = 0;
+          this.dashVy = 0;
+          this.sunAngle = 0;
+          break;
+        case 'magma_boss':
+          this.w = 32;
+          this.h = 32;
+          this.maxHp = Math.round(86 * scale);
+          this.speed = 54;
+          this.damage = 4;
+          this.flying = false;
+          this.phase = 1;
+          this.bossState = 'stalk';
+          this.stateTimer = 1.8;
+          this.summonTimer = 4.6;
+          this.lookAngle = Math.PI / 2;
+          this.dashVx = 0;
+          this.dashVy = 0;
+          break;
         default:
           this.maxHp = 6;
           this.speed = 44;
@@ -392,9 +423,11 @@
 
       // Ember Rod ignites enemies for Burn DoT & melts Frost Sovereign Glacior / ChuChus!
       if (options.isFire) {
-        this.burnTimer = 2.6;
-        this.burnTick = 0.65;
-        this.burnOwner = attacker;
+        if (this.type !== 'magma_boss') {
+          this.burnTimer = 2.6;
+          this.burnTick = 0.65;
+          this.burnOwner = attacker;
+        }
         if (this.type === 'frost_boss') {
           damage += 2;
           game.spawnParticles(this.x, this.y, '#fb923c', 10, 80, { shape: 'star' });
@@ -412,7 +445,11 @@
         this.stunTimer = Math.max(this.stunTimer, options.stun);
       }
 
-      const isAnyBoss = this.type === 'boss' || this.type === 'frost_boss';
+      const isAnyBoss =
+        this.type === 'boss' ||
+        this.type === 'frost_boss' ||
+        this.type === 'desert_boss' ||
+        this.type === 'magma_boss';
       const angle = Math.atan2(this.y - srcY, this.x - srcX);
       const kb = this.stationary ? 0 : isAnyBoss ? 40 : this.type === 'knight' ? 75 : 145;
       this.knockX = Math.cos(angle) * kb;
@@ -423,14 +460,13 @@
       game.hitstop = Math.max(game.hitstop, 0.032);
       game.spawnParticles(this.x, this.y, this.type === 'frost_boss' ? '#7dd3fc' : '#fde047', 6);
 
-      // Boss phase 2 transitions (respawn shield orbs & summon reinforcements immediately!)
+      // Boss phase 2 transitions (summon reinforcements immediately!)
       if (this.type === 'boss' && this.phase === 1 && this.hp <= this.maxHp * 0.5 && this.hp > 0) {
         this.phase = 2;
         this.summonTimer = 0.4;
         FB.audio.play('bossRoar');
         game.screenShake = 7;
         game.showToast('Shadow Wraith Vaalor enters Phase II — Fury of the Four Seals!');
-        // Respawn 3 fast orbs
         this.orbs.forEach((o, i) => {
           o.alive = i < 3;
           o.hp = 4;
@@ -443,6 +479,20 @@
         game.screenShake = 8;
         game.spawnRing(this.x, this.y, '#38bdf8', 36, 0.38);
         game.showToast('Frost Sovereign Glacior enters Phase II — Eternal Blizzard!');
+      } else if (this.type === 'desert_boss' && this.phase === 1 && this.hp <= this.maxHp * 0.5 && this.hp > 0) {
+        this.phase = 2;
+        this.summonTimer = 0.4;
+        FB.audio.play('bossRoar');
+        game.screenShake = 8;
+        game.spawnRing(this.x, this.y, '#facc15', 38, 0.4);
+        game.showToast('Solar Sentinel Solkar enters Phase II — Eclipse Radiance!');
+      } else if (this.type === 'magma_boss' && this.phase === 1 && this.hp <= this.maxHp * 0.5 && this.hp > 0) {
+        this.phase = 2;
+        this.summonTimer = 0.4;
+        FB.audio.play('bossRoar');
+        game.screenShake = 9;
+        game.spawnRing(this.x, this.y, '#f97316', 42, 0.42);
+        game.showToast('Forge Titan Ignis Rex enters Phase II — Volcanic Cataclysm!');
       }
 
       if (this.hp <= 0) {
@@ -458,6 +508,10 @@
           game.onBossDefeated(this);
         } else if (this.type === 'frost_boss') {
           game.onFrostBossDefeated(this);
+        } else if (this.type === 'desert_boss') {
+          game.onDesertBossDefeated(this);
+        } else if (this.type === 'magma_boss') {
+          game.onMagmaBossDefeated(this);
         } else if (this.type === 'chuchu' && !options.isFire && !options.isSpin && !options.isBurn) {
           // ChuChu splits into 2 agile Mini-ChuChus unless melted by Ember Rod or cleared by Spin Attack!
           for (const dirSign of [-1, 1]) {

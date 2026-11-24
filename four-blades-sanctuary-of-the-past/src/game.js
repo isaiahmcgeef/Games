@@ -1641,6 +1641,18 @@
       } else if (reward === 'frost_boss_key') {
         this.hasFrostBossKey = true;
         rewardColor = '#38bdf8';
+      } else if (reward === 'desert_small_key') {
+        this.desertSmallKeys += 1;
+        rewardColor = '#f59e0b';
+      } else if (reward === 'desert_boss_key') {
+        this.hasDesertBossKey = true;
+        rewardColor = '#facc15';
+      } else if (reward === 'magma_small_key') {
+        this.magmaSmallKeys += 1;
+        rewardColor = '#f97316';
+      } else if (reward === 'magma_boss_key') {
+        this.hasMagmaBossKey = true;
+        rewardColor = '#ef4444';
       } else if (reward === 'heart_container') {
         rewardColor = '#ef4444';
         for (const h of this.humanHeroes) {
@@ -1817,6 +1829,16 @@
         this.showToast('Magic Mirror returned you to the Frost Spire Entrance!', 2.4);
         return true;
       }
+      if (this.room.area === 'desert_dungeon') {
+        this.enterRoom('ds_entry', { col: 10, row: 9 });
+        this.showToast('Magic Mirror returned you to the Sunspire Temple Entrance!', 2.4);
+        return true;
+      }
+      if (this.room.area === 'magma') {
+        this.enterRoom('mg_entry', { col: 10, row: 9 });
+        this.showToast('Magic Mirror returned you to the Magma Citadel Entrance!', 2.4);
+        return true;
+      }
 
       this.showToast('The Magic Mirror shimmers softly here.', 2.0);
       return false;
@@ -1911,49 +1933,84 @@
       if (col < 0 || col >= this.roomCols || row < 0 || row >= this.roomRows) return;
       const tile = this.room.grid[row][col];
 
-      // Unlock Small Locked Door (Palace #1 or Frost Spire)
+      // Unlock Small Locked Door (Palace #1, Frost Spire, Sunspire Temple, or Magma Citadel)
       if (tile === T.DOOR_LOCKED) {
         const dir = this._doorDirForTile(col, row);
         const lock = this.room.locks?.[dir];
         const isFrost = lock?.type === 'frost_small' || this.room.area === 'frost';
-        const avail = isFrost ? this.frostSmallKeys : this.smallKeys;
+        const isDesert = lock?.type === 'desert_small' || this.room.area === 'desert_dungeon';
+        const isMagma = lock?.type === 'magma_small' || this.room.area === 'magma';
+        const avail = isFrost
+          ? this.frostSmallKeys
+          : isDesert
+            ? this.desertSmallKeys
+            : isMagma
+              ? this.magmaSmallKeys
+              : this.smallKeys;
         if (avail > 0) {
           if (isFrost) this.frostSmallKeys -= 1;
+          else if (isDesert) this.desertSmallKeys -= 1;
+          else if (isMagma) this.magmaSmallKeys -= 1;
           else this.smallKeys -= 1;
           if (lock) this.unlockedLocks.add(lock.id);
           this._openDoorTiles(this.room, dir);
           FB.audio.play('door');
-          this.spawnParticles(col * TS + 8, row * TS + 8, isFrost ? '#38bdf8' : '#facc15', 12);
-          this.showToast(isFrost ? 'Unlocked Frost Spire Seal!' : 'Unlocked Palace Door!', 2.2);
+          this.spawnParticles(col * TS + 8, row * TS + 8, isFrost ? '#38bdf8' : isMagma ? '#f97316' : '#facc15', 12);
+          this.showToast(
+            isFrost
+              ? 'Unlocked Frost Spire Seal!'
+              : isDesert
+                ? 'Unlocked Sunspire Temple Door!'
+                : isMagma
+                  ? 'Unlocked Magma Citadel Gate!'
+                  : 'Unlocked Palace Door!',
+            2.2
+          );
           this.saveProgress();
           FB.ui.renderHUD(this);
         } else {
           this.showToast(
             isFrost
               ? 'Sealed in ice! Find a Frost Key in the western glacier.'
-              : 'Locked! Find a Small Key in the dungeon chambers.',
+              : isDesert
+                ? 'Locked! Find a Sunspire Key in the western chamber.'
+                : isMagma
+                  ? 'Locked! Find a Magma Key across the eastern molten catwalk.'
+                  : 'Locked! Find a Small Key in the dungeon chambers.',
             2.0
           );
         }
         return;
       }
 
-      // Unlock Boss Door (Palace #1 or Frost Spire)
+      // Unlock Boss Door (All 4 Sovereign Dungeons)
       if (tile === T.DOOR_BOSS) {
         const dir = this._doorDirForTile(col, row);
         const lock = this.room.locks?.[dir];
         const isFrost = lock?.type === 'frost_boss' || this.room.area === 'frost';
-        const hasKey = isFrost ? this.hasFrostBossKey : this.hasBossKey;
+        const isDesert = lock?.type === 'desert_boss' || this.room.area === 'desert_dungeon';
+        const isMagma = lock?.type === 'magma_boss' || this.room.area === 'magma';
+        const hasKey = isFrost
+          ? this.hasFrostBossKey
+          : isDesert
+            ? this.hasDesertBossKey
+            : isMagma
+              ? this.hasMagmaBossKey
+              : this.hasBossKey;
         if (hasKey) {
           if (lock) this.unlockedLocks.add(lock.id);
           this._openDoorTiles(this.room, dir);
           FB.audio.play('door');
           this.screenShake = 4;
-          this.spawnParticles(col * TS + 8, row * TS + 8, isFrost ? '#38bdf8' : '#fde047', 18);
+          this.spawnParticles(col * TS + 8, row * TS + 8, isFrost ? '#38bdf8' : isMagma ? '#f97316' : '#fde047', 18);
           this.showToast(
             isFrost
               ? 'The Frost Crown Gate shatters open! Glacior awaits!'
-              : 'The Boss Door opens! Prepare for battle!',
+              : isDesert
+                ? 'The Solar Sanctum opens! Solar Sentinel Solkar awaits!'
+                : isMagma
+                  ? 'The Caldera Gate opens! Forge Titan Ignis Rex awaits!'
+                  : 'The Boss Door opens! Prepare for battle!',
             2.8
           );
           this.saveProgress();
@@ -1961,8 +2018,12 @@
         } else {
           this.showToast(
             isFrost
-              ? 'Sealed by Frost Sovereign Glacior! Claim the FROST BOSS KEY in the eastern hall.'
-              : 'Sealed by the Sovereign! Find the BOSS KEY in the eastern wing.',
+              ? 'Sealed by Frost Sovereign Glacior! Claim the FROST BOSS KEY.'
+              : isDesert
+                ? 'Sealed by Solar Sentinel Solkar! Claim the SOLAR BOSS KEY.'
+                : isMagma
+                  ? 'Sealed by Forge Titan Ignis Rex! Claim the MAGMA BOSS KEY.'
+                  : 'Sealed by the Sovereign! Find the BOSS KEY in the eastern wing.',
             2.5
           );
         }
@@ -2139,12 +2200,16 @@
         }
       }
 
-      // Triforce Altar: Palace #1 -> Act I Complete (Magic Mirror & Dark World); Frost Spire -> Grand Victory!
+      // Triforce / Sovereign Relic Altar: Palace #1 -> Act I; Frost/Solar/Magma -> Medallion & 4-Medallion Grand Victory!
       if (tile === T.TRIFORCE_ALTAR) {
         if (this.room.id === 'dg_boss' && this.bossDefeated) {
           this.completeAct1();
         } else if (this.room.id === 'fs_boss' && this.frostBossDefeated) {
-          this.triggerVictory();
+          this.claimSovereignMedallion('frost');
+        } else if (this.room.id === 'ds_boss' && this.desertBossDefeated) {
+          this.claimSovereignMedallion('desert');
+        } else if (this.room.id === 'mg_boss' && this.magmaBossDefeated) {
+          this.claimSovereignMedallion('magma');
         }
       }
     }
@@ -2400,6 +2465,10 @@
           this.updateBoss(e, target, dt);
         } else if (e.type === 'frost_boss') {
           this.updateFrostBoss(e, target, dt);
+        } else if (e.type === 'desert_boss') {
+          this.updateDesertBoss(e, target, dt);
+        } else if (e.type === 'magma_boss') {
+          this.updateMagmaBoss(e, target, dt);
         } else if (e.knockTimer > 0) {
           e.knockTimer -= dt;
           this.moveEnemy(e, e.knockX * dt, e.knockY * dt);
@@ -2675,8 +2744,10 @@
       if (activeMinions >= maxMinions) return 0;
 
       const isFrost = boss.type === 'frost_boss';
+      const isDesert = boss.type === 'desert_boss';
+      const isMagma = boss.type === 'magma_boss';
       const slots = Math.min(boss.phase === 2 ? 2 : 1, maxMinions - activeMinions);
-      const biome = isFrost ? 'frost' : 'dungeon';
+      const biome = isFrost ? 'frost' : isDesert ? 'desert_dungeon' : isMagma ? 'magma' : 'dungeon';
       let spawned = 0;
 
       for (let i = 0; i < slots; i++) {
@@ -2685,7 +2756,11 @@
         const sy = Math.max(TS * 2.5, Math.min(this.roomH - TS * 2.5, boss.y + Math.sin(ang) * 34));
 
         let mType = 'keese';
-        if (boss.phase === 2) {
+        if (isDesert) {
+          mType = boss.phase === 2 ? (i === 0 ? 'wizzrobe' : 'stalfos') : 'stalfos';
+        } else if (isMagma) {
+          mType = boss.phase === 2 ? (i === 0 ? 'red_soldier' : 'keese') : 'keese';
+        } else if (boss.phase === 2) {
           if (isFrost) mType = i === 0 ? 'stalfos' : 'red_soldier';
           else mType = i === 0 ? 'stalfos' : 'keese';
         } else if (isFrost && Math.random() < 0.45) {
@@ -2699,9 +2774,16 @@
         this.enemies.push(minion);
         spawned++;
 
-        const ringColor = isFrost ? '#38bdf8' : '#a855f7';
+        const ringColor = isFrost ? '#38bdf8' : isDesert ? '#facc15' : isMagma ? '#f97316' : '#a855f7';
         this.spawnRing(sx, sy, ringColor, 20, 0.28);
-        this.spawnParticles(sx, sy, isFrost ? '#bae6fd' : '#e9d5ff', 10, 65, { shape: 'star' });
+        this.spawnParticles(
+          sx,
+          sy,
+          isFrost ? '#bae6fd' : isDesert ? '#fef08a' : isMagma ? '#fdba74' : '#e9d5ff',
+          10,
+          65,
+          { shape: 'star' }
+        );
       }
 
       if (spawned > 0) {
@@ -2709,8 +2791,8 @@
         this.addFloatingText(
           boss.x,
           boss.y - 18,
-          isFrost ? 'FROST GUARD!' : 'SUMMON!',
-          isFrost ? '#7dd3fc' : '#d8b4fe'
+          isFrost ? 'FROST GUARD!' : isDesert ? 'SOLAR GUARD!' : isMagma ? 'FORGE GUARD!' : 'SUMMON!',
+          isFrost ? '#7dd3fc' : isDesert ? '#fde047' : isMagma ? '#fb923c' : '#d8b4fe'
         );
       }
       return spawned;
@@ -2891,6 +2973,154 @@
       }
     }
 
+    updateDesertBoss(b, target, dt) {
+      const hmMult = this.heroMode ? 1.15 : 1.0;
+      b.lookAngle = Math.atan2(target.y - b.y, target.x - b.x);
+      b.sunAngle = (b.sunAngle || 0) + dt * (b.phase === 2 ? 4.4 : 2.6);
+
+      b.summonTimer = (b.summonTimer !== undefined ? b.summonTimer : 4.4) - dt;
+      if (b.summonTimer <= 0) {
+        this.summonBossMinions(b);
+        b.summonTimer = b.phase === 2 ? 4.5 : 5.8;
+      }
+
+      b.stateTimer -= dt;
+      if (b.bossState === 'orbit') {
+        const ang = b.lookAngle - 0.65;
+        const spd = (b.phase === 2 ? 78 : 56) * hmMult;
+        b.x = Math.max(TS * 2.4, Math.min(this.roomW - TS * 2.4, b.x + Math.cos(ang) * spd * dt));
+        b.y = Math.max(TS * 2.4, Math.min(this.roomH - TS * 2.4, b.y + Math.sin(ang) * spd * dt));
+
+        if (b.stateTimer <= 0) {
+          // Solar volley of reflectable arcane/solar beams!
+          const count = b.phase === 2 ? 7 : 5;
+          for (let i = 0; i < count; i++) {
+            const a = b.lookAngle + (i - (count - 1) / 2) * 0.28;
+            const bSpd = (b.phase === 2 ? 156 : 128) * hmMult;
+            this.projectiles.push(
+              new FB.Projectile({
+                kind: 'arcane_beam',
+                x: b.x + Math.cos(a) * 12,
+                y: b.y + Math.sin(a) * 12,
+                vx: Math.cos(a) * bSpd,
+                vy: Math.sin(a) * bSpd,
+                fromEnemy: true,
+                damage: 2,
+                life: 2.2,
+                radius: 5,
+              })
+            );
+          }
+          FB.audio.play('laser');
+          b.bossState = 'solar_dash';
+          b.stateTimer = 0.72;
+          const dashSpd = (b.phase === 2 ? 185 : 145) * hmMult;
+          b.dashVx = Math.cos(b.lookAngle) * dashSpd;
+          b.dashVy = Math.sin(b.lookAngle) * dashSpd;
+          this.spawnRing(b.x, b.y, '#facc15', 26, 0.25);
+        }
+      } else if (b.bossState === 'solar_dash') {
+        b.x = Math.max(TS * 2.2, Math.min(this.roomW - TS * 2.2, b.x + b.dashVx * dt));
+        b.y = Math.max(TS * 2.2, Math.min(this.roomH - TS * 2.2, b.y + b.dashVy * dt));
+        if (b.stateTimer <= 0) {
+          if (b.phase === 2) {
+            // Phase II 8-way Solar Nova burst!
+            for (let i = 0; i < 8; i++) {
+              const a = b.sunAngle + (i * Math.PI * 2) / 8;
+              this.projectiles.push(
+                new FB.Projectile({
+                  kind: 'laser_beam',
+                  x: b.x,
+                  y: b.y,
+                  vx: Math.cos(a) * 138 * hmMult,
+                  vy: Math.sin(a) * 138 * hmMult,
+                  fromEnemy: true,
+                  damage: 2,
+                  life: 1.9,
+                  radius: 4.5,
+                })
+              );
+            }
+            this.spawnRing(b.x, b.y, '#fde047', 36, 0.3);
+          }
+          b.bossState = 'orbit';
+          b.stateTimer = b.phase === 2 ? 1.2 : 1.65;
+        }
+      }
+    }
+
+    updateMagmaBoss(b, target, dt) {
+      const hmMult = this.heroMode ? 1.15 : 1.0;
+      b.lookAngle = Math.atan2(target.y - b.y, target.x - b.x);
+
+      b.summonTimer = (b.summonTimer !== undefined ? b.summonTimer : 4.6) - dt;
+      if (b.summonTimer <= 0) {
+        this.summonBossMinions(b);
+        b.summonTimer = b.phase === 2 ? 4.4 : 5.8;
+      }
+
+      b.stateTimer -= dt;
+      if (b.bossState === 'stalk') {
+        const spd = (b.phase === 2 ? 68 : 48) * hmMult;
+        b.x = Math.max(TS * 2.4, Math.min(this.roomW - TS * 2.4, b.x + Math.cos(b.lookAngle) * spd * dt));
+        b.y = Math.max(TS * 2.4, Math.min(this.roomH - TS * 2.4, b.y + Math.sin(b.lookAngle) * spd * dt));
+
+        if (b.stateTimer <= 0) {
+          b.bossState = 'slam';
+          b.stateTimer = b.phase === 2 ? 0.55 : 0.72;
+          this.spawnRing(b.x, b.y, '#f97316', 26, 0.25);
+          FB.audio.play('bossRoar');
+        }
+      } else if (b.bossState === 'slam') {
+        if (b.stateTimer <= 0) {
+          // Volcanic Hammer Slam shockwave + radial magma orbs!
+          this.screenShake = Math.max(this.screenShake, 7);
+          this.spawnRing(b.x, b.y, '#ef4444', 44, 0.35);
+          this.spawnParticles(b.x, b.y, '#fb923c', 18, 95, { shape: 'spark' });
+          FB.audio.play('bombBoom');
+
+          const count = b.phase === 2 ? 12 : 8;
+          for (let i = 0; i < count; i++) {
+            const a = (i * Math.PI * 2) / count + (b.phase === 2 ? 0.2 : 0);
+            const spd = (b.phase === 2 ? 148 : 118) * hmMult;
+            this.projectiles.push(
+              new FB.Projectile({
+                kind: 'dark_orb',
+                x: b.x + Math.cos(a) * 12,
+                y: b.y + Math.sin(a) * 12,
+                vx: Math.cos(a) * spd,
+                vy: Math.sin(a) * spd,
+                fromEnemy: true,
+                damage: 3,
+                life: 2.2,
+                radius: 5.5,
+              })
+            );
+          }
+
+          // Close-range shockwave damage
+          for (const h of this.humanHeroes) {
+            if (!h.downed && Math.hypot(h.x - b.x, h.y - b.y) < 42) {
+              h.damage(3, b.x, b.y, this);
+            }
+          }
+
+          b.bossState = 'charge';
+          b.stateTimer = 0.65;
+          const dashSpd = (b.phase === 2 ? 175 : 138) * hmMult;
+          b.dashVx = Math.cos(b.lookAngle) * dashSpd;
+          b.dashVy = Math.sin(b.lookAngle) * dashSpd;
+        }
+      } else if (b.bossState === 'charge') {
+        b.x = Math.max(TS * 2.2, Math.min(this.roomW - TS * 2.2, b.x + b.dashVx * dt));
+        b.y = Math.max(TS * 2.2, Math.min(this.roomH - TS * 2.2, b.y + b.dashVy * dt));
+        if (b.stateTimer <= 0) {
+          b.bossState = 'stalk';
+          b.stateTimer = b.phase === 2 ? 1.25 : 1.7;
+        }
+      }
+    }
+
     _clearSummonedMinions(color = '#e9d5ff') {
       for (const m of this.enemies) {
         if (m.alive && m.isSummoned) {
@@ -2900,46 +3130,101 @@
       }
     }
 
-    onBossDefeated(boss) {
-      this.bossDefeated = true;
+    _revealBossAltar(boss, ringColor, sparkColor, msg) {
       this.slowMoTimer = 0.55;
-      this._clearSummonedMinions('#d8b4fe');
-      this.screenShake = 8;
+      this._clearSummonedMinions(sparkColor);
+      this.screenShake = 9;
       FB.audio.play('victory');
-      this.spawnRing(boss.x, boss.y, '#a855f7', 40, 0.45);
-      this.spawnParticles(boss.x, boss.y, '#fde047', 28, 110);
-      this.spawnParticles(boss.x, boss.y, '#a855f7', 20, 90);
-      this.spawnPickup('heart_container', boss.x, boss.y + 12);
+      this.spawnRing(boss.x, boss.y, ringColor, 42, 0.45);
+      this.spawnParticles(boss.x, boss.y, sparkColor, 30, 115, { shape: 'star' });
+      this.spawnParticles(boss.x, boss.y, '#fde047', 24, 100);
 
-      // Reveal Triforce Victory Altar in center!
+      if (this.arenaState?.active && this.onArenaBossDefeated) {
+        this.onArenaBossDefeated(boss);
+        return;
+      }
+
+      this.spawnPickup('heart_container', boss.x, boss.y + 12);
       const midR = Math.floor(this.roomRows / 2);
       const midC = Math.floor(this.roomCols / 2);
       this.room.grid[midR][midC - 1] = T.TRIFORCE_ALTAR;
       this.room.grid[midR][midC] = T.TRIFORCE_ALTAR;
       this._openDoorTiles(this.room, 'south');
       this.saveProgress();
-      this.showToast('VAALOR DEFEATED! Step onto the Golden Relic Altar to claim the Magic Mirror!', 6.0);
+      this.showToast(msg, 6.2);
+    }
+
+    onBossDefeated(boss) {
+      if (!this.arenaState?.active) this.bossDefeated = true;
+      this._revealBossAltar(
+        boss,
+        '#a855f7',
+        '#d8b4fe',
+        'VAALOR DEFEATED! Step onto the Golden Relic Altar to claim the Magic Mirror!'
+      );
     }
 
     onFrostBossDefeated(boss) {
-      this.frostBossDefeated = true;
-      this.slowMoTimer = 0.55;
-      this._clearSummonedMinions('#bae6fd');
-      this.screenShake = 9;
-      FB.audio.play('victory');
-      this.spawnRing(boss.x, boss.y, '#38bdf8', 42, 0.45);
-      this.spawnParticles(boss.x, boss.y, '#bae6fd', 32, 120, { shape: 'star' });
-      this.spawnParticles(boss.x, boss.y, '#fde047', 24, 100);
-      this.spawnPickup('heart_container', boss.x, boss.y + 14);
+      if (!this.arenaState?.active) this.frostBossDefeated = true;
+      this._revealBossAltar(
+        boss,
+        '#38bdf8',
+        '#bae6fd',
+        'GLACIOR SHATTERED! Step onto the Golden Relic Altar to claim the Frost Medallion!'
+      );
+    }
 
-      // Reveal Relic Altar in center!
-      const midR = Math.floor(this.roomRows / 2);
-      const midC = Math.floor(this.roomCols / 2);
-      this.room.grid[midR][midC - 1] = T.TRIFORCE_ALTAR;
-      this.room.grid[midR][midC] = T.TRIFORCE_ALTAR;
-      this._openDoorTiles(this.room, 'south');
+    onDesertBossDefeated(boss) {
+      if (!this.arenaState?.active) this.desertBossDefeated = true;
+      this._revealBossAltar(
+        boss,
+        '#facc15',
+        '#fef08a',
+        'SOLKAR VANQUISHED! Step onto the Golden Relic Altar to claim the Solar Medallion!'
+      );
+    }
+
+    onMagmaBossDefeated(boss) {
+      if (!this.arenaState?.active) this.magmaBossDefeated = true;
+      this._revealBossAltar(
+        boss,
+        '#f97316',
+        '#fdba74',
+        'IGNIS REX FELLED! Step onto the Golden Relic Altar to claim the Magma Medallion!'
+      );
+    }
+
+    claimSovereignMedallion(which) {
+      const names = { frost: 'Frost Medallion', desert: 'Solar Medallion', magma: 'Magma Medallion' };
+      const allFour =
+        this.bossDefeated &&
+        this.frostBossDefeated &&
+        this.desertBossDefeated &&
+        this.magmaBossDefeated;
+      if (allFour) {
+        this.triggerVictory();
+        return;
+      }
+
+      // Open-World Act II: Celebrate Medallion and return heroes to Sanctuary Haven!
+      for (const h of this.humanHeroes) {
+        h.hp = h.maxHp;
+        h.celebrateTimer = 1.2;
+        h.celebrateColor = '#fde047';
+      }
+      FB.audio.play('victory');
+      const count =
+        (this.bossDefeated ? 1 : 0) +
+        (this.frostBossDefeated ? 1 : 0) +
+        (this.desertBossDefeated ? 1 : 0) +
+        (this.magmaBossDefeated ? 1 : 0);
+      const returnRoom = this.rooms.ow_haven ? 'ow_haven' : 'ow_start';
+      const retPos = returnRoom === 'ow_haven' ? { col: 17, row: 11 } : { col: 10, row: 6 };
+      this.enterRoom(returnRoom, retPos);
       this.saveProgress();
-      this.showToast('GLACIOR SHATTERED! Step onto the Golden Relic Altar to claim the Frost Medallion!', 6.5);
+      this.showDialog(
+        `CLAIMED THE ${(names[which] || 'SOVEREIGN').toUpperCase()}! (${count}/4 Sovereign Medallions united!) Unite all 4 Medallions to complete the Grand Quest and unlock Boss Rush!`
+      );
     }
 
     triggerVictory() {
@@ -2952,6 +3237,7 @@
           prevBest === null || prevBest === undefined ? this.elapsedTime : Math.min(prevBest, this.elapsedTime);
         FB.saves.saveMeta({
           heroModeUnlocked: true,
+          bossRushUnlocked: true,
           bestClearTime,
         });
         FB.saves.saveSlot(this.activeSaveSlot, this);
