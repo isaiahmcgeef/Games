@@ -43,6 +43,8 @@
       ]),
       enemies: [
         { type: 'keese', col: 5, row: 4 },
+        { type: 'chuchu', col: 15, row: 4 },
+        { type: 'beamos', col: 4, row: 8 },
         { type: 'stalfos', col: 14, row: 6 },
       ],
     },
@@ -84,6 +86,7 @@
       ]),
       enemies: [
         { type: 'keese', col: 13, row: 4 },
+        { type: 'chuchu', col: 6, row: 6 },
         { type: 'red_soldier', col: 12, row: 8 },
       ],
     },
@@ -99,6 +102,7 @@
         east: 'fs_dark_hall',
       },
       pedestals: [{ col: 4, row: 10, itemId: FB.ITEMS.HOOKSHOT }],
+      heartPieces: [{ id: 'hp_frost', col: 10, row: 1 }],
       chests: [
         {
           col: 3,
@@ -124,6 +128,7 @@
       ]),
       enemies: [
         { type: 'keese', col: 9, row: 4 },
+        { type: 'wizzrobe', col: 16, row: 3 },
         { type: 'stalfos', col: 16, row: 6 },
         { type: 'keese', col: 6, row: 9 },
       ],

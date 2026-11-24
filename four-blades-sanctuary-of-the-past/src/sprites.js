@@ -1077,6 +1077,141 @@
           break;
         }
 
+        case 'wizzrobe': {
+          const alpha = e.wizAlpha !== undefined ? e.wizAlpha : 1;
+          if (alpha <= 0.04) break;
+          ctx.save();
+          ctx.globalAlpha *= alpha;
+          const hover = Math.round(Math.sin(time * 6 + e.x) * 3);
+          const robeDark = flash ? '#ffffff' : isFrost ? '#075985' : isDark ? '#581c87' : '#312e81';
+          const robeMid = flash ? '#ffffff' : isFrost ? '#0ea5e9' : isDark ? '#9333ea' : '#4f46e5';
+          const trimCol = isFrost ? '#bae6fd' : '#facc15';
+
+          // Arcane aura shimmer beneath floating robe
+          ctx.fillStyle = isFrost ? 'rgba(56, 189, 248, 0.35)' : 'rgba(168, 85, 247, 0.35)';
+          ctx.beginPath();
+          ctx.arc(ex, ey + hover, 16, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Pointed hood & flowing mage robe
+          ctx.fillStyle = OUTLINE;
+          ctx.fillRect(x + 8, y - 2 + hover, 12, 8);
+          ctx.fillRect(x + 4, y + 6 + hover, 20, 20);
+          ctx.fillStyle = robeMid;
+          ctx.fillRect(x + 9, y - 1 + hover, 10, 7);
+          ctx.fillRect(x + 5, y + 7 + hover, 18, 18);
+          ctx.fillStyle = robeDark;
+          ctx.fillRect(x + 5, y + 18 + hover, 18, 7);
+          // Gold rune trim
+          ctx.fillStyle = trimCol;
+          ctx.fillRect(x + 5, y + 22 + hover, 18, 2);
+          ctx.fillRect(x + 12, y + 12 + hover, 4, 10);
+
+          // Shadowed face void + glowing arcane eyes
+          ctx.fillStyle = '#090d16';
+          ctx.fillRect(x + 8, y + 5 + hover, 12, 7);
+          ctx.fillStyle = e.wizPhase === 'appearing' ? '#ffffff' : '#fde047';
+          ctx.fillRect(x + 10, y + 7 + hover, 3, 3);
+          ctx.fillRect(x + 15, y + 7 + hover, 3, 3);
+          ctx.restore();
+          break;
+        }
+
+        case 'chuchu':
+        case 'chuchu_mini': {
+          const isMini = e.type === 'chuchu_mini';
+          const hop = Math.abs(Math.sin((e.hopPhase || 0) + time * (isMini ? 9 : 6)));
+          const lift = Math.round(hop * (isMini ? 7 : 9));
+          const squash = hop < 0.25 ? 2 : 0;
+          const baseCol = flash
+            ? '#ffffff'
+            : isFrost
+              ? '#0284c7'
+              : isDark
+                ? '#7e22ce'
+                : v % 2 === 0
+                  ? '#16a34a'
+                  : '#0891b2';
+          const hiCol = flash
+            ? '#ffffff'
+            : isFrost
+              ? '#7dd3fc'
+              : isDark
+                ? '#d8b4fe'
+                : v % 2 === 0
+                  ? '#86efac'
+                  : '#67e8f9';
+
+          const rw = (isMini ? 16 : 24) + squash * 2;
+          const rh = (isMini ? 13 : 20) - squash;
+          const sx = Math.round(ex - rw / 2);
+          const sy = Math.round(ey + (isMini ? 7 : 11) - rh - lift);
+
+          // Outlined translucent jelly dome
+          ctx.fillStyle = OUTLINE;
+          ctx.fillRect(sx - 1, sy + 2, rw + 2, rh - 1);
+          ctx.fillRect(sx + 2, sy - 1, rw - 4, rh + 2);
+          ctx.fillStyle = baseCol;
+          ctx.fillRect(sx, sy + 2, rw, rh - 2);
+          ctx.fillRect(sx + 3, sy, rw - 6, rh);
+          // Specular jelly highlight
+          ctx.fillStyle = hiCol;
+          ctx.fillRect(sx + 3, sy + 2, Math.max(4, Math.floor(rw * 0.4)), 3);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(sx + 4, sy + 2, 2, 2);
+
+          // Cute expressive ChuChu eyes
+          const eyeY = sy + Math.floor(rh * 0.45);
+          ctx.fillStyle = '#090d16';
+          ctx.fillRect(Math.round(ex) - (isMini ? 4 : 6), eyeY, isMini ? 2 : 3, isMini ? 3 : 4);
+          ctx.fillRect(Math.round(ex) + (isMini ? 2 : 3), eyeY, isMini ? 2 : 3, isMini ? 3 : 4);
+          ctx.fillStyle = '#fef08a';
+          ctx.fillRect(Math.round(ex) - (isMini ? 4 : 5), eyeY + 1, 1, 2);
+          ctx.fillRect(Math.round(ex) + (isMini ? 2 : 4), eyeY + 1, 1, 2);
+          break;
+        }
+
+        case 'beamos': {
+          const ang = e.eyeAngle || 0;
+          // Rotating crimson laser sight sweep telegraph!
+          ctx.save();
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.32)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(ex, ey - 4);
+          ctx.lineTo(ex + Math.cos(ang) * 180, ey - 4 + Math.sin(ang) * 180);
+          ctx.stroke();
+          ctx.restore();
+
+          // Carved obsidian / sandstone stone turret pillar
+          const stoneDark = flash ? '#ffffff' : '#334155';
+          const stoneMid = flash ? '#ffffff' : e.biome === 'desert_dungeon' || e.biome === 'desert' ? '#b45309' : '#64748b';
+          const stoneHi = flash ? '#ffffff' : e.biome === 'desert_dungeon' || e.biome === 'desert' ? '#f59e0b' : '#cbd5e1';
+
+          ctx.fillStyle = OUTLINE;
+          ctx.fillRect(x + 2, y + 1, 28, 28);
+          ctx.fillStyle = stoneDark;
+          ctx.fillRect(x + 3, y + 16, 26, 12);
+          ctx.fillStyle = stoneMid;
+          ctx.fillRect(x + 4, y + 3, 24, 15);
+          ctx.fillStyle = stoneHi;
+          ctx.fillRect(x + 6, y + 4, 20, 4);
+          // Gold crown studs
+          ctx.fillStyle = '#facc15';
+          ctx.fillRect(x + 4, y + 14, 24, 2);
+
+          // Sweeping cyclops crystal eye
+          const eyeX = Math.round(ex + Math.cos(ang) * 6);
+          const eyeY = Math.round(ey - 4 + Math.sin(ang) * 4);
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(x + 7, y + 7, 18, 7);
+          ctx.fillStyle = '#ef4444';
+          ctx.fillRect(eyeX - 4, eyeY - 3, 8, 6);
+          ctx.fillStyle = '#fef08a';
+          ctx.fillRect(eyeX - 2, eyeY - 1, 4, 2);
+          break;
+        }
+
         case 'boss':
           this._drawBoss(ctx, e, time, flash);
           break;
@@ -1471,6 +1606,29 @@
           ctx.fillRect(x - 6, y + 1, 12, 6);
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(x - 8, y - 5, 3, 3);
+          break;
+        }
+
+        case 'heart_piece': {
+          const pulse = Math.sin(time * 6) * 0.14 + 0.3;
+          ctx.fillStyle = `rgba(244, 114, 182, ${pulse})`;
+          ctx.beginPath();
+          ctx.arc(x, y, 16, 0, Math.PI * 2);
+          ctx.fill();
+          // Golden Heart Quarter Shard
+          ctx.fillStyle = OUTLINE;
+          ctx.fillRect(x - 10, y - 9, 20, 14);
+          ctx.fillRect(x - 6, y + 4, 12, 5);
+          ctx.fillStyle = '#facc15';
+          ctx.fillRect(x - 9, y - 8, 18, 12);
+          ctx.fillRect(x - 5, y + 3, 10, 5);
+          ctx.fillStyle = '#ec4899';
+          ctx.fillRect(x - 7, y - 6, 8, 8);
+          ctx.fillRect(x - 4, y + 1, 6, 4);
+          ctx.fillStyle = '#fbcfe8';
+          ctx.fillRect(x - 6, y - 5, 3, 3);
+          ctx.fillStyle = '#334155';
+          ctx.fillRect(x + 2, y - 6, 5, 8);
           break;
         }
 

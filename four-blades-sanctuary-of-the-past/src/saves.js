@@ -44,14 +44,19 @@
     }
 
     getMeta() {
+      const defaults = {
+        heroModeUnlocked: false,
+        bestClearTime: null,
+        bossRushUnlocked: false,
+        bossRushBestTime: null,
+        arenaBestWave: 0,
+      };
       const raw = this._readRaw(META_KEY);
-      if (!raw) {
-        return { heroModeUnlocked: false, bestClearTime: null };
-      }
+      if (!raw) return defaults;
       try {
-        return Object.assign({ heroModeUnlocked: false, bestClearTime: null }, JSON.parse(raw));
+        return Object.assign(defaults, JSON.parse(raw));
       } catch (_) {
-        return { heroModeUnlocked: false, bestClearTime: null };
+        return defaults;
       }
     }
 
@@ -96,13 +101,17 @@
         game.room && game.room.isBossRoom
           ? game.room.area === 'frost'
             ? 'fs_ante'
-            : 'dg_ante'
+            : game.room.area === 'desert_dungeon'
+              ? 'ds_ante'
+              : game.room.area === 'magma'
+                ? 'mg_ante'
+                : 'dg_ante'
           : game.room
             ? game.room.id
             : 'ow_start';
 
       return {
-        version: 1,
+        version: 2,
         updatedAt: Date.now(),
         roomId: safeRoomId,
         roomName: game.rooms?.[safeRoomId]?.name || 'Sanctuary Courtyard',
@@ -112,10 +121,18 @@
         hasBossKey: !!game.hasBossKey,
         frostSmallKeys: game.frostSmallKeys || 0,
         hasFrostBossKey: !!game.hasFrostBossKey,
+        desertSmallKeys: game.desertSmallKeys || 0,
+        hasDesertBossKey: !!game.hasDesertBossKey,
+        magmaSmallKeys: game.magmaSmallKeys || 0,
+        hasMagmaBossKey: !!game.hasMagmaBossKey,
         unlockedLocks: Array.from(game.unlockedLocks || []),
         bossDefeated: !!game.bossDefeated,
         act1Cleared: !!game.act1Cleared,
         frostBossDefeated: !!game.frostBossDefeated,
+        desertBossDefeated: !!game.desertBossDefeated,
+        magmaBossDefeated: !!game.magmaBossDefeated,
+        heartPieces: game.heartPieces || 0,
+        collectedHeartPieces: Array.from(game.collectedHeartPieces || []),
         heroMode: !!game.heroMode,
         friendlyFire: !!game.friendlyFire,
         heroes: game.humanHeroes.map((h) => ({
@@ -130,6 +147,12 @@
           temperedSword: !!h.temperedSword,
           mirrorShield: !!h.mirrorShield,
           potions: h.potions || 0,
+          goldenBlade: !!h.goldenBlade,
+          pegasusOil: !!h.pegasusOil,
+          gripSandals: !!h.gripSandals,
+          blueElixir: !!h.blueElixir,
+          heroMail: !!h.heroMail,
+          blastPowder: !!h.blastPowder,
         })),
         roomStates,
       };

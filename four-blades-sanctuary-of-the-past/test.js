@@ -520,7 +520,65 @@ g.toggleMapDrawer(false);
 assert(g.mapOpen === false, 'World Map Drawer closes cleanly');
 console.log('[PASS] Phase 1 Expansion: Variable/Thin Rooms, Sliding Transitions, Burn DoT, Boss Intro & World Map Drawer');
 
-// 12. Visit & render every room in the world at Hi-Bit 640x416
+// 12. Phase 2 Expansion: Wizzrobe, ChuChu, Beamos & Hidden Heart Pieces
+g.enterRoom('dw_woods', { col: 10, row: 7 });
+const wiz = new FB.Enemy('wizzrobe', 140, 100, 1, 'darkworld');
+g.enemies = [wiz];
+g.projectiles = [];
+wiz.wizPhase = 'appearing';
+wiz.wizTimer = 0.05;
+g.updateEnemies(0.1);
+assert(wiz.wizPhase === 'visible', 'Wizzrobe completes teleport materialize phase');
+assert(g.projectiles.some((p) => p.kind === 'arcane_beam' && p.fromEnemy), 'Wizzrobe fires arcane_beam upon appearing');
+wiz.wizPhase = 'vanished';
+assert(wiz.hit(5, 100, 100, g.humanHeroes[0], g) === false, 'Vanished Wizzrobe is untargetable');
+
+// ChuChu splits on normal slash, does NOT split on Fire or Spin Attack!
+const chu1 = new FB.Enemy('chuchu', 120, 110, 1, 'frost');
+g.enemies = [chu1];
+chu1.hit(99, 100, 110, g.humanHeroes[0], g, {});
+assert(g.enemies.filter((e) => e.type === 'chuchu_mini' && e.alive).length === 2, 'Normal sword kill splits ChuChu into 2 Mini-ChuChus');
+
+const chu2 = new FB.Enemy('chuchu', 120, 110, 1, 'frost');
+g.enemies = [chu2];
+chu2.hit(99, 100, 110, g.humanHeroes[0], g, { isFire: true });
+assert(g.enemies.filter((e) => e.type === 'chuchu_mini' && e.alive).length === 0, 'Ember Rod fire kill melts ChuChu without splitting');
+
+const chu3 = new FB.Enemy('chuchu', 120, 110, 1, 'frost');
+g.enemies = [chu3];
+chu3.hit(99, 100, 110, g.humanHeroes[0], g, { isSpin: true });
+assert(g.enemies.filter((e) => e.type === 'chuchu_mini' && e.alive).length === 0, 'Spin Attack clears ChuChu without splitting');
+
+// Beamos laser sentry: immune to sword, fires laser_beam on line-of-sight, shattered by Bomb!
+const bea = new FB.Enemy('beamos', 160, 112, 1, 'frost');
+g.enemies = [bea];
+g.projectiles = [];
+g.humanHeroes[0].x = 220;
+g.humanHeroes[0].y = 112;
+bea.eyeAngle = 0;
+bea.beamCooldown = 0;
+g.updateEnemies(0.05);
+assert(g.projectiles.some((p) => p.kind === 'laser_beam' && p.fromEnemy), 'Beamos fires laser_beam when eye sweeps over hero');
+assert(bea.hit(10, 140, 112, g.humanHeroes[0], g, {}) === false && bea.alive, 'Beamos deflects non-bomb attacks');
+bea.hurtTimer = 0;
+assert(bea.hit(5, 150, 112, g.humanHeroes[0], g, { isBomb: true }) === true && !bea.alive, 'Beamos shattered by Bomb blast');
+
+// Hidden Heart Pieces: 4 pieces = +1 permanent Max Heart + persists across save/load!
+g.startNewGame(1, { slotIndex: 2 });
+const hpHero = g.humanHeroes[0];
+const baseMaxHp = hpHero.maxHp;
+for (let i = 1; i <= 4; i++) {
+  g.collectPickup(new FB.Pickup('heart_piece', hpHero.x, hpHero.y, { pieceId: `test_hp_${i}` }), hpHero);
+}
+assert(g.heartPieces === 4, 'Collected 4 Heart Pieces');
+assert(hpHero.maxHp === baseMaxHp + 2, '4 Heart Pieces permanently grant +1 Max Heart (+2 HP)');
+g.saveProgress();
+g.loadSaveSlot(2, 1);
+assert(g.heartPieces === 4 && g.collectedHeartPieces.has('test_hp_4'), 'Heart Pieces persist across Save/Load');
+FB.saves.deleteSlot(2);
+console.log('[PASS] Phase 2 Expansion: Wizzrobe, ChuChu Split/Melt, Beamos Bomb Sentry & Heart Pieces');
+
+// 13. Visit & render every room in the world at Hi-Bit 640x416
 for (const id of Object.keys(g.rooms)) {
   const r = g.rooms[id];
   g.enterRoom(id, { col: Math.floor((r.cols || 20) / 2), row: Math.floor((r.rows || 13) / 2) });

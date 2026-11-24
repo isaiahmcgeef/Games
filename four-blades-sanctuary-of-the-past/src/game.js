@@ -187,9 +187,17 @@
       this.frostSmallKeys = 0;
       this.hasFrostBossKey = false;
       this.unlockedLocks = new Set();
+      this.desertSmallKeys = 0;
+      this.hasDesertBossKey = false;
+      this.magmaSmallKeys = 0;
+      this.hasMagmaBossKey = false;
       this.bossDefeated = false;
       this.act1Cleared = false;
       this.frostBossDefeated = false;
+      this.desertBossDefeated = false;
+      this.magmaBossDefeated = false;
+      this.heartPieces = 0;
+      this.collectedHeartPieces = new Set();
       this.elapsedTime = 0;
       this.spiritClone = null;
       this.activeDialog = null;
@@ -241,10 +249,18 @@
       this.hasBossKey = !!data.hasBossKey;
       this.frostSmallKeys = data.frostSmallKeys || 0;
       this.hasFrostBossKey = !!data.hasFrostBossKey;
+      this.desertSmallKeys = data.desertSmallKeys || 0;
+      this.hasDesertBossKey = !!data.hasDesertBossKey;
+      this.magmaSmallKeys = data.magmaSmallKeys || 0;
+      this.hasMagmaBossKey = !!data.hasMagmaBossKey;
       this.unlockedLocks = new Set(data.unlockedLocks || []);
       this.bossDefeated = !!data.bossDefeated;
       this.act1Cleared = !!data.act1Cleared;
       this.frostBossDefeated = !!data.frostBossDefeated;
+      this.desertBossDefeated = !!data.desertBossDefeated;
+      this.magmaBossDefeated = !!data.magmaBossDefeated;
+      this.heartPieces = data.heartPieces || 0;
+      this.collectedHeartPieces = new Set(data.collectedHeartPieces || []);
       this.heroMode = !!data.heroMode;
       this.friendlyFire = !!data.friendlyFire;
       this.elapsedTime = data.elapsedTime || 0;
@@ -309,11 +325,18 @@
         h.temperedSword = !!(sh ? sh.temperedSword : template.temperedSword);
         h.mirrorShield = !!(sh ? sh.mirrorShield : template.mirrorShield);
         h.potions = sh ? sh.potions || 0 : 0;
+        h.goldenBlade = !!(sh ? sh.goldenBlade : template.goldenBlade);
+        h.pegasusOil = !!(sh ? sh.pegasusOil : template.pegasusOil);
+        h.gripSandals = !!(sh ? sh.gripSandals : template.gripSandals);
+        h.blueElixir = !!(sh ? sh.blueElixir : false);
+        h.heroMail = !!(sh ? sh.heroMail : template.heroMail);
+        h.blastPowder = !!(sh ? sh.blastPowder : template.blastPowder);
         this.humanHeroes.push(h);
       }
 
       const targetRoom = this.rooms[data.roomId] ? data.roomId : 'ow_start';
-      this.enterRoom(targetRoom, { col: 10, row: 7 });
+      const tr = this.rooms[targetRoom];
+      this.enterRoom(targetRoom, { col: Math.floor((tr.cols || 20) / 2), row: Math.floor((tr.rows || 13) / 2) });
       this.state = 'playing';
       FB.ui.setOverlay('none');
       FB.ui.showDialog(null);
@@ -2041,7 +2064,7 @@
       const forwardOffset = isFinisher ? 16 : 13;
       const cx = isSpin ? hero.x : hero.x + dv.x * forwardOffset;
       const cy = isSpin ? hero.y : hero.y + dv.y * forwardOffset;
-      const tempBonus = hero.temperedSword && !hero.isClone ? 1 : 0;
+      const tempBonus = hero.isClone ? 0 : hero.goldenBlade ? 2 : hero.temperedSword ? 1 : 0;
       const dmg = (isSpin ? 4 : hero.isClone ? 1 : isFinisher ? 3 : 2) + tempBonus;
 
       // Hit tiles (Bushes, Pots, Crystal Switches)
@@ -2172,7 +2195,7 @@
           // Bonus counter-hit damage when striking a stunned/parried enemy!
           const bonus = e.stunTimer > 0 ? 1 : 0;
           const dealt = dmg + bonus;
-          const hitOk = e.hit(dealt, hero.x, hero.y, hero.isClone ? this.humanHeroes[0] : hero, this);
+          const hitOk = e.hit(dealt, hero.x, hero.y, hero.isClone ? this.humanHeroes[0] : hero, this, { isSpin });
           if (hitOk && bonus > 0) {
             this.spawnParticles(e.x, e.y, '#fde047', 6, 70, { shape: 'star', life: 0.22 });
           }
@@ -2293,6 +2316,7 @@
         }
 
         // Contact damage with heroes (extended slightly during enemy weapon lunge!)
+        if (e.type === 'wizzrobe' && e.wizPhase === 'vanished') continue;
         const hitDist = e.lungeTimer > 0 ? (e.w + 15) * 0.5 : (e.w + 10) * 0.45;
         for (const h of liveHeroes) {
           if (Math.hypot(h.x - e.x, h.y - e.y) < hitDist) {
@@ -2335,6 +2359,108 @@
       const hmCadence = this.heroMode ? 0.8 : 1.0;
       e.aiTimer -= dt;
       e.shootTimer -= dt;
+
+      if (e.type === 'wizzrobe') {
+        // Teleporting Arcane Mage: visible (fires reflectable arcane_beam) -> fading -> vanished -> teleport -> appearing!
+        e.wizTimer -= dt;
+        if (e.wizPhase === 'visible') {
+          e.wizAlpha = 1;
+          if (e.wizTimer <= 0) {
+            e.wizPhase = 'fading';
+            e.wizTimer = 0.35;
+          }
+        } else if (e.wizPhase === 'fading') {
+          e.wizAlpha = Math.max(0, e.wizTimer / 0.35);
+          if (e.wizTimer <= 0) {
+            e.wizPhase = 'vanished';
+            e.wizAlpha = 0;
+            e.wizTimer = (0.75 + Math.random() * 0.45) * hmCadence;
+          }
+        } else if (e.wizPhase === 'vanished') {
+          e.wizAlpha = 0;
+          if (e.wizTimer <= 0) {
+            // Teleport to a safe walkable tile within mid-range of the hero
+            const ang = Math.random() * Math.PI * 2;
+            const rad = 52 + Math.random() * 58;
+            const tx = Math.max(TS * 2, Math.min(this.roomW - TS * 2, target.x + Math.cos(ang) * rad));
+            const ty = Math.max(TS * 2, Math.min(this.roomH - TS * 2, target.y + Math.sin(ang) * rad));
+            const safe = this._findSafeTileNear(this.room, Math.floor(tx / TS), Math.floor(ty / TS));
+            e.x = safe.col * TS + 8;
+            e.y = safe.row * TS + 8;
+            e.wizPhase = 'appearing';
+            e.wizTimer = 0.4;
+            this.spawnRing(e.x, e.y, '#c084fc', 16, 0.25);
+          }
+        } else if (e.wizPhase === 'appearing') {
+          e.wizAlpha = Math.min(1, 1 - e.wizTimer / 0.4);
+          if (e.wizTimer <= 0) {
+            e.wizPhase = 'visible';
+            e.wizAlpha = 1;
+            e.wizTimer = (1.35 + Math.random() * 0.45) * hmCadence;
+            // Fire Mirror-Shield-reflectable Arcane Beam!
+            const ang = Math.atan2(target.y - e.y, target.x - e.x);
+            const spd = 148 * hmSpd;
+            this.projectiles.push(
+              new FB.Projectile({
+                kind: 'arcane_beam',
+                x: e.x + Math.cos(ang) * 8,
+                y: e.y + Math.sin(ang) * 8,
+                vx: Math.cos(ang) * spd,
+                vy: Math.sin(ang) * spd,
+                fromEnemy: true,
+                damage: 2,
+                life: 2.2,
+                radius: 5,
+              })
+            );
+            FB.audio.play('fire');
+          }
+        }
+        return;
+      }
+
+      if (e.type === 'chuchu' || e.type === 'chuchu_mini') {
+        e.hopPhase = (e.hopPhase || 0) + dt * (e.type === 'chuchu_mini' ? 9 : 6);
+        const hopping = Math.sin(e.hopPhase) > 0;
+        if (hopping && dist < 185) {
+          const ang = Math.atan2(target.y - e.y, target.x - e.x);
+          const spd = e.speed * 1.45 * hmSpd;
+          this.moveEnemy(e, Math.cos(ang) * spd * dt, Math.sin(ang) * spd * dt);
+        }
+        return;
+      }
+
+      if (e.type === 'beamos') {
+        // Rotating Dungeon Laser Sentry — sweeps eye and blasts heroes in line-of-sight!
+        e.eyeAngle = (e.eyeAngle || 0) + dt * (this.heroMode ? 1.55 : 1.15);
+        if (e.beamCooldown > 0) e.beamCooldown -= dt;
+        if (e.beamCooldown <= 0 && dist < 140) {
+          const toHero = Math.atan2(target.y - e.y, target.x - e.x);
+          let diff = toHero - e.eyeAngle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          if (Math.abs(diff) < 0.22) {
+            e.beamCooldown = 1.25 * hmCadence;
+            const spd = 215 * hmSpd;
+            this.projectiles.push(
+              new FB.Projectile({
+                kind: 'laser_beam',
+                x: e.x + Math.cos(toHero) * 10,
+                y: e.y + Math.sin(toHero) * 10,
+                vx: Math.cos(toHero) * spd,
+                vy: Math.sin(toHero) * spd,
+                fromEnemy: true,
+                damage: 3,
+                life: 1.5,
+                radius: 4.5,
+              })
+            );
+            FB.audio.play('laser');
+            this.spawnRing(e.x, e.y, '#ef4444', 18, 0.2);
+          }
+        }
+        return;
+      }
 
       if (e.type === 'octorok') {
         if (e.aiTimer <= 0) {
@@ -3247,6 +3373,29 @@
           this.spawnRing(item.x, item.y, '#fde047', 24, 0.35);
           this.showToast('Heart Container claimed! All heroes gain +1 Max Heart!', 3.2);
           break;
+        case 'heart_piece': {
+          if (item.pieceId) this.collectedHeartPieces.add(item.pieceId);
+          this.heartPieces += 1;
+          hero.celebrateTimer = 1.1;
+          hero.celebrateColor = '#f472b6';
+          FB.audio.play('heartPiece');
+          this.spawnParticles(item.x, item.y, '#f472b6', 14, 70, { shape: 'star' });
+          this.spawnRing(item.x, item.y, '#fde047', 24, 0.35);
+          if (this.heartPieces % 4 === 0) {
+            for (const h of this.humanHeroes) {
+              h.maxHp += 2;
+              h.hp = h.maxHp;
+            }
+            this.showDialog(
+              `HEART PIECE 4/4 COMPLETED! Your Heart Pieces united into a full HEART CONTAINER! All heroes permanently gain +1 Max Heart!`
+            );
+          } else {
+            const rem = this.heartPieces % 4;
+            this.showToast(`Found a Hidden Heart Piece! (${rem}/4 toward +1 Max Heart)`, 3.6);
+          }
+          this.saveProgress();
+          break;
+        }
         case 'key':
           this.smallKeys += 1;
           FB.audio.play('key');
@@ -3972,6 +4121,24 @@
         ctx.fillRect(-16, -4, 32, 8);
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(-10, -2, 24, 4);
+      } else if (p.kind === 'arcane_beam') {
+        const ang = Math.atan2(p.vy, p.vx);
+        ctx.rotate(ang);
+        ctx.fillStyle = 'rgba(192, 132, 252, 0.45)';
+        ctx.fillRect(-18, -9, 36, 18);
+        ctx.fillStyle = '#a855f7';
+        ctx.fillRect(-14, -5, 28, 10);
+        ctx.fillStyle = '#f5d0fe';
+        ctx.fillRect(-10, -2, 22, 4);
+      } else if (p.kind === 'laser_beam') {
+        const ang = Math.atan2(p.vy, p.vx);
+        ctx.rotate(ang);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.48)';
+        ctx.fillRect(-22, -7, 44, 14);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(-18, -4, 36, 8);
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(-14, -2, 28, 4);
       } else if (p.kind === 'thrown_pot') {
         ctx.rotate(p.angle * 0.5);
         ctx.fillStyle = '#24140b';

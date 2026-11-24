@@ -88,6 +88,12 @@
       this.temperedSword = false;
       this.mirrorShield = false;
       this.potions = 0;
+      this.goldenBlade = false;
+      this.pegasusOil = false;
+      this.gripSandals = false;
+      this.blueElixir = false;
+      this.heroMail = false;
+      this.blastPowder = false;
       this.streakCount = 0;
       this.streakTimer = 0;
       this.iceVx = 0;
@@ -121,7 +127,8 @@
     damage(amount, srcX, srcY, game) {
       if (this.isClone || this.downed || this.invuln > 0 || this.dashTimer > 0 || this.thrownTimer > 0) return;
       const mult = game.heroMode ? 2 : 1;
-      const finalAmt = Math.max(1, Math.round(amount * mult));
+      const mailMitigation = this.heroMail ? 1 : 0;
+      const finalAmt = Math.max(1, Math.round(amount * mult) - mailMitigation);
       this.hp = Math.max(0, this.hp - finalAmt);
       this.damageTaken += finalAmt;
       this.invuln = FB.CONFIG.INVULN_TIME;
@@ -144,7 +151,7 @@
       game.spawnParticles(this.x, this.y, '#ef4444', 7);
 
       if (this.hp <= 0) {
-        // Red Potion Auto-Revive!
+        // Red Potion or Blue Elixir Auto-Revive!
         if (this.potions > 0) {
           this.potions -= 1;
           this.hp = this.maxHp;
@@ -154,6 +161,17 @@
           game.spawnParticles(this.x, this.y, '#fda4af', 14, 70, { shape: 'star' });
           game.addFloatingText(this.x, this.y - 12, 'POTION REVIVE!', '#fb7185');
           game.showToast(`${this.profile.name}'s Red Potion restored full health!`, 2.8);
+          return;
+        }
+        if (this.blueElixir) {
+          this.blueElixir = false;
+          this.hp = this.maxHp;
+          this.invuln = 2.2;
+          FB.audio.play('fairy');
+          game.spawnRing(this.x, this.y, '#38bdf8', 30, 0.42);
+          game.spawnParticles(this.x, this.y, '#bae6fd', 18, 85, { shape: 'star' });
+          game.addFloatingText(this.x, this.y - 12, 'BLUE ELIXIR!', '#38bdf8');
+          game.showToast(`${this.profile.name}'s Oasis Blue Elixir restored full vigor!`, 3.0);
           return;
         }
         if (game.humanHeroes.length > 1) {
@@ -249,6 +267,45 @@
           this.damage = 4;
           this.rupeeDrop = 'rupee_red';
           break;
+        case 'wizzrobe':
+          this.maxHp = Math.round(9 * scale * biomeMult);
+          this.speed = 32;
+          this.damage = 2;
+          this.flying = true;
+          this.wizPhase = 'visible'; // 'visible' | 'fading' | 'vanished' | 'appearing'
+          this.wizTimer = 1.4 + Math.random() * 0.8;
+          this.wizAlpha = 1;
+          this.rupeeDrop = 'rupee_red';
+          break;
+        case 'chuchu':
+          this.w = 15;
+          this.h = 15;
+          this.maxHp = Math.round(7 * scale * biomeMult);
+          this.speed = 36;
+          this.damage = 2;
+          this.hopPhase = Math.random() * Math.PI * 2;
+          this.rupeeDrop = 'rupee_blue';
+          break;
+        case 'chuchu_mini':
+          this.w = 10;
+          this.h = 10;
+          this.maxHp = Math.max(2, Math.round(3 * scale));
+          this.speed = 64;
+          this.damage = 1;
+          this.hopPhase = Math.random() * Math.PI * 2;
+          this.rupeeDrop = 'rupee_green';
+          break;
+        case 'beamos':
+          this.w = 16;
+          this.h = 16;
+          this.maxHp = 5;
+          this.speed = 0;
+          this.damage = 2;
+          this.stationary = true;
+          this.eyeAngle = Math.random() * Math.PI * 2;
+          this.beamCooldown = 0.6;
+          this.rupeeDrop = 'rupee_red';
+          break;
         case 'boss':
           this.w = 30;
           this.h = 30;
@@ -304,6 +361,20 @@
     hit(damage, srcX, srcY, attacker, game, options = {}) {
       if (!this.alive || (!options.isBurn && this.hurtTimer > 0.08)) return false;
 
+      // Vanished Wizzrobes cannot be hit while phased out!
+      if (this.type === 'wizzrobe' && this.wizPhase === 'vanished') {
+        return false;
+      }
+
+      // Beamos Laser Statues are carved obsidian — ONLY Bombs can shatter them!
+      if (this.type === 'beamos' && !options.isBomb) {
+        FB.audio.play('clink');
+        game.spawnParticles(this.x, this.y, '#cbd5e1', 5, 55, { shape: 'spark' });
+        game.addFloatingText(this.x, this.y - 12, 'BOMB!', '#fde047');
+        this.hurtTimer = 0.16;
+        return false;
+      }
+
       // Boss shield orbs protect the core until at least 2 orbs are broken in phase 1
       if (this.type === 'boss' && !options.ignoreOrbs) {
         const aliveOrbs = this.orbs.filter((o) => o.alive).length;
@@ -319,7 +390,7 @@
         damage = 1;
       }
 
-      // Ember Rod ignites enemies for Burn DoT & melts Frost Sovereign Glacior for bonus fire damage!
+      // Ember Rod ignites enemies for Burn DoT & melts Frost Sovereign Glacior / ChuChus!
       if (options.isFire) {
         this.burnTimer = 2.6;
         this.burnTick = 0.65;
@@ -328,6 +399,10 @@
           damage += 2;
           game.spawnParticles(this.x, this.y, '#fb923c', 10, 80, { shape: 'star' });
           game.addFloatingText(this.x, this.y - 16, 'MELT!', '#fb923c');
+        } else if (this.type === 'chuchu') {
+          damage += 4;
+          game.spawnParticles(this.x, this.y, '#fb923c', 10, 75, { shape: 'star' });
+          game.addFloatingText(this.x, this.y - 12, 'MELTED!', '#fb923c');
         }
       }
 
@@ -339,10 +414,10 @@
 
       const isAnyBoss = this.type === 'boss' || this.type === 'frost_boss';
       const angle = Math.atan2(this.y - srcY, this.x - srcX);
-      const kb = isAnyBoss ? 40 : this.type === 'knight' ? 75 : 145;
+      const kb = this.stationary ? 0 : isAnyBoss ? 40 : this.type === 'knight' ? 75 : 145;
       this.knockX = Math.cos(angle) * kb;
       this.knockY = Math.sin(angle) * kb;
-      this.knockTimer = isAnyBoss ? 0.07 : 0.14;
+      this.knockTimer = this.stationary ? 0 : isAnyBoss ? 0.07 : 0.14;
 
       FB.audio.play('hit');
       game.hitstop = Math.max(game.hitstop, 0.032);
@@ -383,6 +458,19 @@
           game.onBossDefeated(this);
         } else if (this.type === 'frost_boss') {
           game.onFrostBossDefeated(this);
+        } else if (this.type === 'chuchu' && !options.isFire && !options.isSpin && !options.isBurn) {
+          // ChuChu splits into 2 agile Mini-ChuChus unless melted by Ember Rod or cleared by Spin Attack!
+          for (const dirSign of [-1, 1]) {
+            const mx = Math.max(24, Math.min(game.roomW - 24, this.x + dirSign * 11));
+            const my = Math.max(24, Math.min(game.roomH - 24, this.y + (dirSign > 0 ? 4 : -4)));
+            const mini = new FB.Enemy('chuchu_mini', mx, my, game.humanHeroes.length, this.biome);
+            mini.variant = this.variant;
+            mini.knockX = dirSign * 95;
+            mini.knockY = -30;
+            mini.knockTimer = 0.16;
+            game.enemies.push(mini);
+          }
+          game.addFloatingText(this.x, this.y - 12, 'SPLIT!', '#67e8f9');
         } else {
           // Drop loot
           const roll = Math.random();
@@ -429,6 +517,7 @@
       this.vx = extra.vx || 0;
       this.vy = extra.vy || 0;
       this.itemId = extra.itemId || null;
+      this.pieceId = extra.pieceId || null;
       this.alive = true;
       this.age = 0;
       this.magnetDelay = 0.2;

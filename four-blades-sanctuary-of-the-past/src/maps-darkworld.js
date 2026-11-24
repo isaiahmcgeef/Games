@@ -81,6 +81,8 @@
       ]),
       enemies: [
         { type: 'stalfos', col: 9, row: 3 },
+        { type: 'wizzrobe', col: 15, row: 4 },
+        { type: 'chuchu', col: 14, row: 9 },
         { type: 'knight', col: 11, row: 7 },
         { type: 'red_soldier', col: 6, row: 9 },
       ],
@@ -110,6 +112,7 @@
           label: 'Crimson Vault! +100 Rupees & Full Heal!',
         },
       ],
+      heartPieces: [{ id: 'hp_dw_river', col: 16, row: 6 }],
       grid: parseGrid([
         'YYYYYYYYYYYYYYYYYYYY',
         'YdddddwwwddddddddddY',
@@ -127,6 +130,7 @@
       ]),
       enemies: [
         { type: 'keese', col: 8, row: 4 },
+        { type: 'wizzrobe', col: 16, row: 5 },
         { type: 'stalfos', col: 13, row: 6 },
         { type: 'red_soldier', col: 13, row: 9 },
       ],

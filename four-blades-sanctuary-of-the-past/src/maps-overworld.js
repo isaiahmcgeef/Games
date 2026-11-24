@@ -126,8 +126,10 @@
           label: 'Heart Container! All heroes gain +1 Max Heart!',
         },
       ],
+      heartPieces: [{ id: 'hp_woods', col: 2, row: 1 }],
       enemies: [
         { type: 'octorok', col: 8, row: 3 },
+        { type: 'chuchu', col: 15, row: 3 },
         { type: 'soldier', col: 12, row: 9 },
         { type: 'octorok', col: 4, row: 9 },
       ],
@@ -159,8 +161,10 @@
         'TTTTTTTTTTTTTTTTTTTT',
       ]),
       pedestals: [{ col: 16, row: 1, itemId: FB.ITEMS.BOW }],
+      heartPieces: [{ id: 'hp_river', col: 2, row: 11 }],
       enemies: [
         { type: 'soldier', col: 12, row: 7 },
+        { type: 'chuchu', col: 11, row: 10 },
         { type: 'red_soldier', col: 14, row: 10 },
         { type: 'octorok', col: 3, row: 10 },
       ],
