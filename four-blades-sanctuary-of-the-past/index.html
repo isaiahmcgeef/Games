@@ -104,10 +104,16 @@
             </div>
           </div>
 
+          <div id="save-slots-row" class="save-slots-row" aria-label="Save Slots"></div>
+
           <div class="lobby-options">
             <label class="toggle-label">
               <input id="friendly-fire-toggle" type="checkbox" />
-              Four Swords Chaos (Friendly Sword Bonks drop 5 Rupees)
+              Four Swords Chaos (Friendly Bonks drop 5 Rupees)
+            </label>
+            <label class="toggle-label">
+              <input id="hero-mode-toggle" type="checkbox" />
+              <span id="hero-mode-label">Hero Mode (2× Damage + Speedrun Timer)</span>
             </label>
             <span id="gamepad-status" class="gamepad-note">Checking controllers…</span>
           </div>
@@ -116,15 +122,24 @@
         </div>
       </div>
 
-      <!-- Pause Overlay -->
+      <!-- Pause Overlay (with Mid-Run Drop-In / Drop-Out Co-op) -->
       <div id="pause-overlay" class="overlay hidden">
         <div class="overlay-card compact">
           <h2 class="game-title" style="font-size:24px;">PAUSED</h2>
-          <p class="game-subtitle">Press Esc or P anytime to resume your adventure.</p>
+          <p class="game-subtitle">Press Esc or P anytime to resume. Progress auto-saves!</p>
+          <div class="pause-dropin">
+            <div class="pause-dropin-label">Drop-In / Drop-Out Players</div>
+            <div class="pause-player-row" role="group" aria-label="Active Players">
+              <button type="button" class="pause-p-btn active" data-pause-players="1">1P</button>
+              <button type="button" class="pause-p-btn" data-pause-players="2">2P</button>
+              <button type="button" class="pause-p-btn" data-pause-players="3">3P</button>
+              <button type="button" class="pause-p-btn" data-pause-players="4">4P</button>
+            </div>
+          </div>
           <div class="stack-btns">
             <button id="btn-resume" type="button" class="btn-primary">RESUME QUEST</button>
-            <button id="btn-restart-pause" type="button" class="btn-secondary">RESTART RUN</button>
-            <button id="btn-menu-pause" type="button" class="btn-secondary">CHANGE PLAYERS / TITLE</button>
+            <button id="btn-restart-pause" type="button" class="btn-secondary">RESTART THIS SLOT</button>
+            <button id="btn-menu-pause" type="button" class="btn-secondary">SAVE &amp; TITLE SCREEN</button>
           </div>
         </div>
       </div>
@@ -157,7 +172,10 @@
   <script defer src="src/audio.js"></script>
   <script defer src="src/sprites.js"></script>
   <script defer src="src/input.js"></script>
+  <script defer src="src/saves.js"></script>
   <script defer src="src/maps.js"></script>
+  <script defer src="src/maps-overworld.js"></script>
+  <script defer src="src/maps-palace.js"></script>
   <script defer src="src/entities.js"></script>
   <script defer src="src/ui.js"></script>
   <script defer src="src/game.js"></script>

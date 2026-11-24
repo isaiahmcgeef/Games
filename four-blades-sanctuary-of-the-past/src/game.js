@@ -40,8 +40,14 @@
 
       this.smallKeys = 0;
       this.hasBossKey = false;
+      this.frostSmallKeys = 0;
+      this.hasFrostBossKey = false;
       this.unlockedLocks = new Set();
       this.bossDefeated = false;
+      this.act1Cleared = false;
+      this.frostBossDefeated = false;
+      this.heroMode = false;
+      this.activeSaveSlot = 0;
       this.activeDialog = null;
       this.dialogTimer = 0;
       this.hudTick = 0;
@@ -51,6 +57,7 @@
     init() {
       FB.sprites.init();
       FB.ui.init(this);
+      FB.ui.renderSaveSlots(this);
       FB.ui.setOverlay('title');
 
       // Show animated sanctuary background behind title screen
@@ -65,15 +72,30 @@
       return this.spiritClone ? [...this.humanHeroes, this.spiritClone] : this.humanHeroes;
     }
 
-    startNewGame(playerCount) {
+    saveProgress() {
+      if (!FB.saves || this.state === 'title') return;
+      FB.saves.saveSlot(this.activeSaveSlot, this);
+    }
+
+    startNewGame(playerCount, opts = {}) {
       this.selectedPlayerCount = playerCount;
+      if (opts.slotIndex !== undefined) {
+        this.activeSaveSlot = opts.slotIndex;
+      }
+      if (opts.heroMode !== undefined) {
+        this.heroMode = !!opts.heroMode;
+      }
       FB.input.setPlayerCount(playerCount);
 
       this.rooms = FB.createWorldData();
       this.smallKeys = 0;
       this.hasBossKey = false;
+      this.frostSmallKeys = 0;
+      this.hasFrostBossKey = false;
       this.unlockedLocks = new Set();
       this.bossDefeated = false;
+      this.act1Cleared = false;
+      this.frostBossDefeated = false;
       this.elapsedTime = 0;
       this.spiritClone = null;
       this.activeDialog = null;
@@ -96,6 +118,7 @@
 
       this.enterRoom('ow_start', null);
       this.state = 'playing';
+      this.saveProgress();
       FB.ui.setOverlay('none');
       FB.ui.showDialog(null);
       FB.ui.renderHUD(this);
@@ -107,10 +130,149 @@
       this.showToast(modeLabel, 4.2);
     }
 
+    loadSaveSlot(slotIndex, overridePlayerCount) {
+      const data = FB.saves ? FB.saves.getSlot(slotIndex) : null;
+      if (!data) {
+        this.startNewGame(overridePlayerCount || this.selectedPlayerCount, { slotIndex });
+        return false;
+      }
+
+      this.activeSaveSlot = slotIndex;
+      const playerCount = Math.max(1, Math.min(4, overridePlayerCount || data.playerCount || 1));
+      this.selectedPlayerCount = playerCount;
+      FB.input.setPlayerCount(playerCount);
+
+      this.rooms = FB.createWorldData();
+      this.smallKeys = data.smallKeys || 0;
+      this.hasBossKey = !!data.hasBossKey;
+      this.frostSmallKeys = data.frostSmallKeys || 0;
+      this.hasFrostBossKey = !!data.hasFrostBossKey;
+      this.unlockedLocks = new Set(data.unlockedLocks || []);
+      this.bossDefeated = !!data.bossDefeated;
+      this.act1Cleared = !!data.act1Cleared;
+      this.frostBossDefeated = !!data.frostBossDefeated;
+      this.heroMode = !!data.heroMode;
+      this.friendlyFire = !!data.friendlyFire;
+      this.elapsedTime = data.elapsedTime || 0;
+      this.spiritClone = null;
+      this.activeDialog = null;
+      this.dialogTimer = 0;
+
+      // Restore per-room state (visited, opened chests, claimed pedestals, solved puzzles, crystal state)
+      for (const [id, st] of Object.entries(data.roomStates || {})) {
+        const room = this.rooms[id];
+        if (!room) continue;
+        room.visited = !!st.visited;
+        room.puzzleSolved = !!st.puzzleSolved;
+        room.openedChests = new Set(st.openedChests || []);
+        room.claimedPedestals = new Set(st.claimedPedestals || []);
+        room.destroyedTiles = new Set(st.destroyedTiles || []);
+        room.crystalState = st.crystalState || 'blue';
+
+        // Reflect opened chests and solved puzzles on room grid
+        if (room.puzzleSolved && room.puzzle) {
+          if (room.puzzle.unlockDoor) this._openDoorTiles(room, room.puzzle.unlockDoor);
+          if (room.puzzle.spawnChest) {
+            const ch = room.puzzle.spawnChest;
+            room.grid[ch.row][ch.col] = room.openedChests.has(`${ch.col},${ch.row}`)
+              ? T.CHEST_OPEN
+              : T.CHEST_CLOSED;
+          }
+          if (room.puzzle.spawnBigChest) {
+            const ch = room.puzzle.spawnBigChest;
+            room.grid[ch.row][ch.col] = room.openedChests.has(`${ch.col},${ch.row}`)
+              ? T.BIG_CHEST_OPEN
+              : T.BIG_CHEST_CLOSED;
+          }
+        }
+        for (const key of room.openedChests) {
+          const [cc, rr] = key.split(',').map(Number);
+          if (room.grid[rr]?.[cc] === T.CHEST_CLOSED) room.grid[rr][cc] = T.CHEST_OPEN;
+          if (room.grid[rr]?.[cc] === T.BIG_CHEST_CLOSED) room.grid[rr][cc] = T.BIG_CHEST_OPEN;
+        }
+        for (const key of room.destroyedTiles) {
+          const [cc, rr] = key.split(',').map(Number);
+          if (room.grid[rr]?.[cc] === T.CRACKED_WALL) room.grid[rr][cc] = T.DUNGEON_FLOOR;
+          if (room.grid[rr]?.[cc] === T.ROCK_CRACKED) room.grid[rr][cc] = T.PATH;
+        }
+      }
+
+      // Restore heroes (syncing shared items/maxHp if playerCount changed!)
+      const savedHeroes = data.heroes || [];
+      const template = savedHeroes[0] || {};
+      this.humanHeroes = [];
+      for (let i = 0; i < playerCount; i++) {
+        const sh = savedHeroes[i];
+        const h = new FB.Hero(i, 10 * TS, 7 * TS, false);
+        h.showTag = playerCount > 1;
+        h.maxHp = sh ? sh.maxHp : template.maxHp || FB.CONFIG.START_MAX_HP;
+        h.hp = sh ? Math.min(h.maxHp, Math.max(2, sh.hp)) : h.maxHp;
+        h.rupees = sh ? sh.rupees || 0 : 0;
+        h.kills = sh ? sh.kills || 0 : 0;
+        h.revives = sh ? sh.revives || 0 : 0;
+        h.items = sh && sh.items?.length ? [...sh.items] : template.items?.length ? [...template.items] : [FB.ITEMS.BOOMERANG];
+        h.itemIdx = sh ? Math.min(sh.itemIdx || 0, h.items.length - 1) : 0;
+        h.temperedSword = !!(sh ? sh.temperedSword : template.temperedSword);
+        h.mirrorShield = !!(sh ? sh.mirrorShield : template.mirrorShield);
+        h.potions = sh ? sh.potions || 0 : 0;
+        this.humanHeroes.push(h);
+      }
+
+      const targetRoom = this.rooms[data.roomId] ? data.roomId : 'ow_start';
+      this.enterRoom(targetRoom, { col: 10, row: 7 });
+      this.state = 'playing';
+      FB.ui.setOverlay('none');
+      FB.ui.showDialog(null);
+      FB.ui.renderHUD(this);
+      this.showToast(`Loaded Slot ${slotIndex + 1} — ${this.room.name}`, 3.0);
+      return true;
+    }
+
+    setActivePlayerCount(newCount) {
+      const count = Math.max(1, Math.min(4, newCount));
+      if (count === this.humanHeroes.length) return;
+      this.selectedPlayerCount = count;
+      FB.input.setPlayerCount(count);
+
+      const leader = this.humanHeroes[0];
+      if (!leader) return;
+
+      if (count > this.humanHeroes.length) {
+        // Drop-In new teammates right beside P1 with synced shared items & maxHp!
+        this.spiritClone = null;
+        for (let i = this.humanHeroes.length; i < count; i++) {
+          const h = new FB.Hero(i, leader.x + (i % 2 === 0 ? -14 : 14), leader.y, false);
+          h.maxHp = leader.maxHp;
+          h.hp = leader.maxHp;
+          h.items = [...leader.items];
+          h.itemIdx = leader.itemIdx;
+          h.temperedSword = leader.temperedSword;
+          h.mirrorShield = leader.mirrorShield;
+          this.humanHeroes.push(h);
+          this.spawnParticles(h.x, h.y, h.profile.uiColor, 10, 55, { shape: 'star' });
+        }
+      } else {
+        // Drop-Out excess players cleanly
+        this.humanHeroes = this.humanHeroes.slice(0, count);
+      }
+
+      for (const h of this.humanHeroes) {
+        h.showTag = count > 1;
+      }
+      this.saveProgress();
+      FB.ui.renderHUD(this);
+      FB.ui.syncPausePlayerButtons(count);
+      this.showToast(`Active Party updated to ${count} Player${count > 1 ? 's' : ''}!`, 2.5);
+    }
+
     returnToTitle() {
+      if (this.state === 'playing' || this.state === 'paused') {
+        this.saveProgress();
+      }
       this.state = 'title';
       FB.audio.stopMusic();
       FB.ui.showDialog(null);
+      FB.ui.renderSaveSlots(this);
       FB.ui.setOverlay('title');
     }
 
@@ -118,12 +280,19 @@
       if (this.state !== 'playing' && this.state !== 'paused') return;
       const shouldPause = forceState !== undefined ? forceState : this.state === 'playing';
       this.state = shouldPause ? 'paused' : 'playing';
+      if (shouldPause) {
+        this.saveProgress();
+        FB.ui.syncPausePlayerButtons(this.humanHeroes.length);
+      }
       FB.ui.setOverlay(shouldPause ? 'paused' : 'none');
     }
 
     respawnFromGameOver() {
-      // Respawn at Sanctuary Courtyard or Palace Entrance with full hearts, keeping progress!
-      const targetId = this.room && this.room.area === 'dungeon' ? 'dg_entry' : 'ow_start';
+      // Respawn at Sanctuary Courtyard or Dungeon Entrance with full hearts, keeping progress!
+      let targetId = 'ow_start';
+      if (this.room?.area === 'dungeon') targetId = 'dg_entry';
+      else if (this.room?.area === 'frost') targetId = 'fs_entry';
+      else if (this.room?.area === 'darkworld') targetId = 'dw_start';
       for (const h of this.humanHeroes) {
         h.downed = false;
         h.hp = h.maxHp;
@@ -248,6 +417,9 @@
       }
 
       this.transitionOverlayAlpha = 0.85;
+      if (this.state === 'playing') {
+        this.saveProgress();
+      }
       FB.ui.renderHUD(this);
     }
 
@@ -1693,9 +1865,11 @@
           const tile = this.room.grid[r][c];
           if (tile === T.CRACKED_WALL) {
             this.room.grid[r][c] = T.DUNGEON_FLOOR;
+            this.room.destroyedTiles.add(`${c},${r}`);
             discoveredSecret = true;
           } else if (tile === T.ROCK_CRACKED) {
             this.room.grid[r][c] = T.PATH;
+            this.room.destroyedTiles.add(`${c},${r}`);
             discoveredSecret = true;
           } else if (tile === T.BUSH) {
             this.room.grid[r][c] = T.GRASS;

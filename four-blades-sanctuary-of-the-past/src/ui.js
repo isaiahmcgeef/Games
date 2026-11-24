@@ -43,6 +43,9 @@
         btnMusic: document.getElementById('btn-music'),
         btnPause: document.getElementById('btn-pause'),
         friendlyFireToggle: document.getElementById('friendly-fire-toggle'),
+        heroModeToggle: document.getElementById('hero-mode-toggle'),
+        heroModeLabel: document.getElementById('hero-mode-label'),
+        saveSlotsRow: document.getElementById('save-slots-row'),
       };
 
       // Player count selector buttons
@@ -57,16 +60,39 @@
         });
       });
 
+      // Pause Drop-In / Drop-Out player count buttons
+      const pausePBtns = document.querySelectorAll('.pause-p-btn');
+      pausePBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const count = parseInt(btn.dataset.pausePlayers, 10) || 1;
+          game.setActivePlayerCount(count);
+        });
+      });
+
       if (this.els.friendlyFireToggle) {
         this.els.friendlyFireToggle.addEventListener('change', (e) => {
           game.friendlyFire = !!e.target.checked;
         });
       }
 
+      if (this.els.heroModeToggle) {
+        this.els.heroModeToggle.addEventListener('change', (e) => {
+          game.heroMode = !!e.target.checked;
+        });
+      }
+
       if (this.els.btnStart) {
         this.els.btnStart.addEventListener('click', () => {
           FB.audio.init();
-          game.startNewGame(game.selectedPlayerCount);
+          const slot = FB.saves ? FB.saves.getSlot(game.activeSaveSlot) : null;
+          if (slot) {
+            game.loadSaveSlot(game.activeSaveSlot, game.selectedPlayerCount);
+          } else {
+            game.startNewGame(game.selectedPlayerCount, {
+              slotIndex: game.activeSaveSlot,
+              heroMode: game.heroMode,
+            });
+          }
         });
       }
 
@@ -76,7 +102,10 @@
       if (this.els.btnRestartPause) {
         this.els.btnRestartPause.addEventListener('click', () => {
           game.togglePause(false);
-          game.startNewGame(game.selectedPlayerCount);
+          game.startNewGame(game.selectedPlayerCount, {
+            slotIndex: game.activeSaveSlot,
+            heroMode: game.heroMode,
+          });
         });
       }
       if (this.els.btnMenuPause) {
@@ -111,6 +140,80 @@
       }
 
       this.updateControlCards(1);
+    }
+
+    renderSaveSlots(game) {
+      if (!this.els.saveSlotsRow || !FB.saves) return;
+      const slots = FB.saves.getAllSlots();
+      const meta = FB.saves.getMeta();
+      if (this.els.heroModeLabel) {
+        this.els.heroModeLabel.textContent = meta.heroModeUnlocked
+          ? '★ Hero Mode Unlocked (2× Damage + Speedrun Timer)'
+          : 'Hero Mode Preview (2× Damage + Speedrun Timer)';
+      }
+
+      let html = '';
+      slots.forEach((s, idx) => {
+        const active = game.activeSaveSlot === idx ? 'active' : '';
+        if (!s) {
+          html += `
+            <div class="save-slot-card ${active}" data-slot-idx="${idx}">
+              <div class="save-slot-head"><span>Slot ${idx + 1}</span><span>NEW</span></div>
+              <div class="save-slot-meta">Empty Sanctuary File<br/>Click Embark to begin</div>
+            </div>
+          `;
+        } else {
+          const act = s.act1Cleared ? 'Act II' : 'Act I';
+          const hearts = Math.ceil((s.heroes?.[0]?.maxHp || 12) / 2);
+          const rupees = (s.heroes || []).reduce((sum, h) => sum + (h.rupees || 0), 0);
+          const secs = Math.floor(s.elapsedTime || 0);
+          const mins = Math.floor(secs / 60);
+          const rem = String(secs % 60).padStart(2, '0');
+          html += `
+            <div class="save-slot-card ${active}" data-slot-idx="${idx}">
+              <div class="save-slot-head">
+                <span>Slot ${idx + 1} • ${act}${s.heroMode ? ' ★' : ''}</span>
+                <button type="button" class="save-slot-del" data-del-slot="${idx}" title="Delete Save">✕</button>
+              </div>
+              <div class="save-slot-meta">${s.roomName || 'Sanctuary'}<br/>♥${hearts} • ◆${rupees} • ${mins}:${rem}</div>
+            </div>
+          `;
+        }
+      });
+
+      this.els.saveSlotsRow.innerHTML = html;
+
+      // Update Embark button label based on selected slot
+      const sel = slots[game.activeSaveSlot];
+      if (this.els.btnStart) {
+        this.els.btnStart.textContent = sel
+          ? `CONTINUE SLOT ${game.activeSaveSlot + 1}`
+          : `EMBARK (SLOT ${game.activeSaveSlot + 1})`;
+      }
+
+      this.els.saveSlotsRow.querySelectorAll('.save-slot-card').forEach((card) => {
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.save-slot-del')) return;
+          game.activeSaveSlot = parseInt(card.dataset.slotIdx, 10) || 0;
+          this.renderSaveSlots(game);
+        });
+      });
+
+      this.els.saveSlotsRow.querySelectorAll('.save-slot-del').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.dataset.delSlot, 10);
+          FB.saves.deleteSlot(idx);
+          this.renderSaveSlots(game);
+        });
+      });
+    }
+
+    syncPausePlayerButtons(count) {
+      document.querySelectorAll('.pause-p-btn').forEach((btn) => {
+        const p = parseInt(btn.dataset.pausePlayers, 10);
+        btn.classList.toggle('active', p === count);
+      });
     }
 
     updateControlCards(count) {

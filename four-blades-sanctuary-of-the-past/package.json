@@ -4,7 +4,8 @@
   "description": "Browser-based Zelda: A Link to the Past & Four Swords inspired action-adventure with optional 1-4 player local multiplayer.",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node test.js"
   },
   "keywords": [
     "zelda",
