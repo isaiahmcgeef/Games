@@ -394,6 +394,10 @@
           ctx.fillStyle = '#dc2626';
         } else if (r.area === 'overworld') {
           ctx.fillStyle = '#3f8f47';
+        } else if (r.area === 'darkworld') {
+          ctx.fillStyle = '#7e22ce';
+        } else if (r.area === 'frost') {
+          ctx.fillStyle = '#0284c7';
         } else {
           ctx.fillStyle = '#476899';
         }

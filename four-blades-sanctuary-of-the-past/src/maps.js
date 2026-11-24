@@ -53,6 +53,14 @@
     'W': T.SHOP_COUNTER,
     'M': T.MERCHANT,
     'f': T.SHOP_FLOOR,
+    '&': T.POST_LATCH,
+    'd': T.DARK_GRASS,
+    'Y': T.DARK_TREE,
+    'w': T.DARK_WATER,
+    'q': T.DARK_PATH,
+    '@': T.PORTAL_DARK,
+    'V': T.PORTAL_FROST,
+    'i': T.ICE_FLOOR,
   };
 
   FB.parseGrid = function parseGrid(rows) {

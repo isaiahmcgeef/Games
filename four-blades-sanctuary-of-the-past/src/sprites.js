@@ -518,6 +518,75 @@
           px(5, 6, 6, 3, '#e2e8f0'); // Beard
           break;
 
+        case T.POST_LATCH:
+          // Iron-banded wooden Hookshot Latch Post with golden bullseye cap
+          px(0, 0, 16, 16, '#463854');
+          px(4, 11, 8, 4, '#241b2e');
+          px(5, 4, 6, 10, '#8f5d32');
+          px(6, 4, 2, 10, '#b57b48');
+          px(4, 3, 8, 3, '#94a3b8');
+          px(6, 4, 4, 2, '#fde047');
+          px(4, 9, 8, 2, '#64748b');
+          break;
+
+        case T.DARK_GRASS:
+          px(0, 0, 16, 16, '#463854');
+          px(2, 3, 2, 1, '#584769');
+          px(10, 7, 2, 1, '#584769');
+          px(5, 12, 2, 1, '#362a42');
+          px(12, 13, 2, 1, '#6b4d6e');
+          break;
+
+        case T.DARK_TREE:
+          px(0, 0, 16, 16, '#463854');
+          px(4, 12, 8, 4, '#261b30');
+          px(5, 10, 6, 5, '#47302c');
+          px(2, 1, 12, 10, '#4f1d38');
+          px(1, 3, 14, 7, '#6b2546');
+          px(3, 2, 10, 7, '#873256');
+          px(4, 3, 5, 3, '#a84768');
+          break;
+
+        case T.DARK_WATER:
+          px(0, 0, 16, 16, '#5c1d38');
+          px(2, 3, 5, 1, '#8c2d52');
+          px(9, 8, 5, 1, '#8c2d52');
+          px(3, 12, 4, 1, '#be4b72');
+          break;
+
+        case T.DARK_PATH:
+          px(0, 0, 16, 16, '#6e5c78');
+          px(2, 2, 3, 2, '#826e8c');
+          px(10, 6, 3, 2, '#5c4b66');
+          px(5, 11, 4, 2, '#826e8c');
+          break;
+
+        case T.PORTAL_DARK:
+          px(0, 0, 16, 16, '#362a42');
+          px(2, 2, 12, 12, '#6b21a8');
+          px(4, 4, 8, 8, '#a855f7');
+          px(6, 6, 4, 4, '#f3e8ff');
+          break;
+
+        case T.PORTAL_FROST:
+          px(0, 0, 16, 16, '#334155');
+          px(1, 0, 14, 3, '#7dd3fc');
+          px(2, 3, 12, 13, '#0c4a6e');
+          px(4, 5, 8, 11, '#082f49');
+          px(6, 6, 4, 3, '#bae6fd');
+          break;
+
+        case T.ICE_FLOOR:
+          px(0, 0, 16, 16, '#67c8eb');
+          px(0, 0, 16, 1, '#bae6fd');
+          px(0, 0, 1, 16, '#bae6fd');
+          px(0, 15, 16, 1, '#3898bd');
+          px(15, 0, 1, 16, '#3898bd');
+          px(3, 3, 4, 1, '#e0f2fe');
+          px(4, 4, 2, 1, '#ffffff');
+          px(9, 10, 4, 1, '#bae6fd');
+          break;
+
         default:
           drawGrassBase();
       }
@@ -531,16 +600,28 @@
         ctx.drawImage(cached, dx, dy);
       }
 
-      // Dynamic animated accents for water, swaying flowers, torches, crystals, fairy pool, chests, altar
-      if (id === T.WATER) {
+      // Dynamic animated accents for water, swaying flowers, torches, crystals, portals, ice, altar
+      if (id === T.WATER || id === T.DARK_WATER) {
         const wave = Math.floor(time * 3 + dx * 0.08 + dy * 0.04) % 6;
         const crest = Math.sin(time * 3.5 + dx * 0.1) > 0.4 ? 1 : 0;
-        ctx.fillStyle = 'rgba(210, 240, 255, 0.42)';
+        ctx.fillStyle = id === T.DARK_WATER ? 'rgba(244, 114, 182, 0.35)' : 'rgba(210, 240, 255, 0.42)';
         ctx.fillRect(dx + 1 + wave, dy + 4, 4, 1);
         ctx.fillRect(dx + 10 - wave, dy + 11, 4, 1);
         if (crest) {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
           ctx.fillRect(dx + 4 + (wave % 3) * 2, dy + 7, 2, 1);
+        }
+      } else if (id === T.PORTAL_DARK) {
+        const r1 = 4 + Math.sin(time * 6) * 2;
+        ctx.strokeStyle = 'rgba(216, 180, 254, 0.8)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(dx + 8, dy + 8, r1, time * 3, time * 3 + Math.PI * 1.4);
+        ctx.stroke();
+      } else if (id === T.ICE_FLOOR) {
+        if (Math.floor(time * 5 + dx * 0.1 + dy * 0.1) % 9 === 0) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(dx + 5, dy + 5, 2, 1);
         }
       } else if (id === T.GRASS_FLOWERS) {
         const sway = Math.round(Math.sin(time * 2.8 + dx * 0.12 + dy * 0.1) * 1);
@@ -1650,6 +1731,24 @@
             ctx.fill();
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(x - 1, y - 4, 2, 2);
+          } else if (item.itemId === FB.ITEMS.HOOKSHOT) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(x - 1, y - 2, 2, 6);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(x - 4, y - 3, 8, 2);
+            ctx.fillRect(x - 4, y - 5, 2, 3);
+            ctx.fillRect(x + 2, y - 5, 2, 3);
+            ctx.fillStyle = '#fde047';
+            ctx.fillRect(x - 1, y - 4, 2, 2);
+          } else if (item.itemId === FB.ITEMS.MIRROR) {
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(x - 3, y - 5, 6, 8);
+            ctx.fillStyle = '#c084fc';
+            ctx.fillRect(x - 2, y - 4, 4, 6);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x - 1, y - 3, 2, 3);
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(x - 1, y + 3, 2, 3);
           } else {
             ctx.fillStyle = meta.color;
             ctx.beginPath();

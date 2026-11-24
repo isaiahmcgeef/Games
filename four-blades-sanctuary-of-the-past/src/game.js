@@ -402,18 +402,38 @@
         }
       }
 
+      // Open Dark World Rift in Sanctuary Courtyard once Act I is cleared!
+      if (room.id === 'ow_start' && this.act1Cleared) {
+        room.grid[5][10] = T.PORTAL_DARK;
+        room.portals = room.portals || [];
+        if (!room.portals.some((p) => p.targetRoom === 'dw_start')) {
+          room.portals.push({ col: 10, row: 5, targetRoom: 'dw_start', targetCol: 10, targetRow: 5 });
+        }
+      }
+
       // If boss room entered with boss alive, bar exit and cue boss music!
-      if (room.isBossRoom && !this.bossDefeated) {
+      if (room.isBossRoom && room.id === 'dg_boss' && !this.bossDefeated) {
         this._setDoorTiles(room, 'south', T.DOOR_BARRED);
         FB.audio.play('bossRoar');
         FB.audio.playMusic('boss');
         this.showToast('SHADOW WRAITH VAALOR — Break its dark orbs to expose the core!', 4.2);
-      } else if (room.isBossRoom && this.bossDefeated) {
+      } else if (room.isBossRoom && room.id === 'dg_boss' && this.bossDefeated) {
         this._openDoorTiles(room, 'south');
         room.grid[6][9] = T.TRIFORCE_ALTAR;
         room.grid[6][10] = T.TRIFORCE_ALTAR;
+      } else if (room.isBossRoom && room.id === 'fs_boss' && !this.frostBossDefeated) {
+        this._setDoorTiles(room, 'south', T.DOOR_BARRED);
+        FB.audio.play('bossRoar');
+        FB.audio.playMusic('boss');
+        this.showToast('FROST SOVEREIGN GLACIOR — Melt or parry its fury to shatter the spire!', 4.5);
+      } else if (room.isBossRoom && room.id === 'fs_boss' && this.frostBossDefeated) {
+        this._openDoorTiles(room, 'south');
+        room.grid[6][9] = T.TRIFORCE_ALTAR;
+        room.grid[6][10] = T.TRIFORCE_ALTAR;
+      } else if (room.area === 'darkworld') {
+        FB.audio.playMusic('darkworld');
       } else {
-        FB.audio.playMusic(room.area === 'dungeon' ? 'dungeon' : 'overworld');
+        FB.audio.playMusic(room.area === 'dungeon' || room.area === 'frost' ? 'dungeon' : 'overworld');
       }
 
       this.transitionOverlayAlpha = 0.85;
@@ -1328,7 +1348,104 @@
         hero.lastItemUsed = item;
         this.projectiles.push(proj);
         FB.audio.play('fire');
+      } else if (item === FB.ITEMS.HOOKSHOT) {
+        if (hero.activeHookshot && hero.activeHookshot.alive) return;
+        const proj = new FB.Projectile({
+          kind: 'hookshot',
+          x: hero.x + dv.x * 8,
+          y: hero.y + dv.y * 8,
+          vx: dv.x * 260,
+          vy: dv.y * 260,
+          owner: hero,
+          life: 0.46,
+          damage: 2,
+          radius: 5,
+        });
+        proj.latched = false;
+        hero.activeHookshot = proj;
+        hero.itemCooldown = 0.32;
+        hero.itemAnimTimer = 0.28;
+        hero.lastItemUsed = item;
+        this.projectiles.push(proj);
+        FB.audio.play('hookshot');
+      } else if (item === FB.ITEMS.MIRROR) {
+        hero.itemCooldown = 0.7;
+        this.useMagicMirror(hero);
       }
+    }
+
+    _findSafeTileNear(room, targetCol, targetRow) {
+      const clampC = Math.max(1, Math.min(FB.ROOM_COLS - 2, Math.round(targetCol)));
+      const clampR = Math.max(1, Math.min(FB.ROOM_ROWS - 2, Math.round(targetRow)));
+      const isWalkable = (c, r) => {
+        if (c < 1 || c >= FB.ROOM_COLS - 1 || r < 1 || r >= FB.ROOM_ROWS - 1) return false;
+        const t = room.grid[r][c];
+        return !FB.SOLID_TILES.has(t) && t !== T.PIT && t !== T.SPIKES;
+      };
+      if (isWalkable(clampC, clampR)) return { col: clampC, row: clampR };
+      for (let rad = 1; rad <= 8; rad++) {
+        for (let dr = -rad; dr <= rad; dr++) {
+          for (let dc = -rad; dc <= rad; dc++) {
+            if (isWalkable(clampC + dc, clampR + dr)) {
+              return { col: clampC + dc, row: clampR + dr };
+            }
+          }
+        }
+      }
+      return { col: 10, row: 7 };
+    }
+
+    useMagicMirror(hero) {
+      if (!this.room) return false;
+      FB.audio.play('mirror');
+      this.spawnRing(hero.x, hero.y, '#c084fc', 26, 0.35);
+      this.spawnParticles(hero.x, hero.y, '#e9d5ff', 14, 70, { shape: 'star' });
+
+      // Light World <-> Dark World mirrored warp!
+      if (this.room.mirrorTarget && this.rooms[this.room.mirrorTarget]) {
+        const destRoom = this.rooms[this.room.mirrorTarget];
+        const curCol = Math.floor(hero.x / TS);
+        const curRow = Math.floor(hero.y / TS);
+        const safe = this._findSafeTileNear(destRoom, curCol, curRow);
+        this.enterRoom(destRoom.id, safe);
+        this.showToast(`Magic Mirror warped you to ${destRoom.name}!`, 2.6);
+        return true;
+      }
+
+      // Inside dungeons -> classic ALttP escape to dungeon entrance!
+      if (this.room.area === 'dungeon') {
+        this.enterRoom('dg_entry', { col: 10, row: 9 });
+        this.showToast('Magic Mirror returned you to the Palace Entrance!', 2.4);
+        return true;
+      }
+      if (this.room.area === 'frost') {
+        this.enterRoom('fs_entry', { col: 10, row: 9 });
+        this.showToast('Magic Mirror returned you to the Frost Spire Entrance!', 2.4);
+        return true;
+      }
+
+      this.showToast('The Magic Mirror shimmers softly here.', 2.0);
+      return false;
+    }
+
+    completeAct1() {
+      if (this.act1Cleared) {
+        this.enterRoom('ow_start', { col: 10, row: 6 });
+        return;
+      }
+      this.act1Cleared = true;
+      for (const h of this.humanHeroes) {
+        h.grantItem(FB.ITEMS.MIRROR);
+        h.hp = h.maxHp;
+        h.celebrateTimer = 1.4;
+        h.celebrateColor = '#c084fc';
+      }
+      FB.audio.play('victory');
+      this.enterRoom('ow_start', { col: 10, row: 6 });
+      this.saveProgress();
+      this.showDialog(
+        'ACT I COMPLETE! Vaalor is vanquished and you claimed the MAGIC MIRROR! Use the Magic Mirror (Item) or step into the Dark Rift ahead to enter the Dark World, claim the Hookshot in Cursed Thicket (West), and conquer the Frost Spire (North)!'
+      );
     }
 
     isSolidAt(col, row, flying = false) {
@@ -1510,7 +1627,10 @@
         tile === T.DUNGEON_FLOOR ||
         tile === T.DUNGEON_CARPET ||
         tile === T.BRIDGE ||
-        tile === T.SHOP_FLOOR
+        tile === T.SHOP_FLOOR ||
+        tile === T.DARK_GRASS ||
+        tile === T.DARK_PATH ||
+        tile === T.ICE_FLOOR
       ) {
         hero.safeX = col * TS + 8;
         hero.safeY = row * TS + 8;
@@ -1521,19 +1641,21 @@
         (tile === T.PORTAL_DUNGEON ||
           tile === T.PORTAL_OVERWORLD ||
           tile === T.PORTAL_SHOP ||
-          tile === T.SHOP_EXIT) &&
+          tile === T.SHOP_EXIT ||
+          tile === T.PORTAL_DARK ||
+          tile === T.PORTAL_FROST) &&
         this.room.portals
       ) {
         const portal = this.room.portals.find((p) => p.col === col && p.row === row);
-        if (portal) {
-          FB.audio.play('door');
+        if (portal && this.rooms[portal.targetRoom]) {
+          FB.audio.play(tile === T.PORTAL_DARK ? 'mirror' : 'door');
           this.enterRoom(portal.targetRoom, { col: portal.targetCol, row: portal.targetRow });
           return;
         }
       }
 
-      // Pit fall
-      if (tile === T.PIT && hero.dashTimer <= 0 && hero.thrownTimer <= 0) {
+      // Pit fall (immune during dash, teammate throw, or hookshot zip!)
+      if (tile === T.PIT && hero.dashTimer <= 0 && hero.thrownTimer <= 0 && !hero.hookZipping) {
         hero.damage(1, hero.x, hero.y, this);
         hero.x = hero.safeX;
         hero.y = hero.safeY;
@@ -1541,7 +1663,7 @@
       }
 
       // Spikes
-      if (tile === T.SPIKES) {
+      if (tile === T.SPIKES && !hero.hookZipping) {
         hero.damage(1, col * TS + 8, row * TS + 8, this);
       }
 
@@ -1556,9 +1678,13 @@
         }
       }
 
-      // Triforce Victory Altar!
-      if (tile === T.TRIFORCE_ALTAR && this.bossDefeated) {
-        this.triggerVictory();
+      // Triforce Altar: Palace #1 -> Act I Complete (Magic Mirror & Dark World); Frost Spire -> Grand Victory!
+      if (tile === T.TRIFORCE_ALTAR) {
+        if (this.room.id === 'dg_boss' && this.bossDefeated) {
+          this.completeAct1();
+        } else if (this.room.id === 'fs_boss' && this.frostBossDefeated) {
+          this.triggerVictory();
+        }
       }
     }
 
@@ -2075,6 +2201,104 @@
           if (p.life <= 0) {
             this.explodeBomb(p);
             p.alive = false;
+          }
+          continue;
+        }
+
+        if (p.kind === 'hookshot') {
+          if (p.latched && p.owner) {
+            // Pull owner rapidly toward latched post / chest across pits & rivers!
+            p.owner.hookZipping = true;
+            const dx = p.latchX - p.owner.x;
+            const dy = p.latchY - p.owner.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 14) {
+              p.owner.hookZipping = false;
+              p.alive = false;
+            } else {
+              const spd = 290;
+              p.owner.x += (dx / dist) * spd * dt;
+              p.owner.y += (dy / dist) * spd * dt;
+            }
+            continue;
+          }
+
+          if (!p.returning && p.life <= 0) {
+            p.returning = true;
+          }
+          if (p.returning && p.owner) {
+            const dx = p.owner.x - p.x;
+            const dy = p.owner.y - p.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 12) {
+              p.owner.hookZipping = false;
+              p.alive = false;
+              continue;
+            }
+            p.vx = (dx / dist) * 280;
+            p.vy = (dy / dist) * 280;
+          }
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+
+          // Pull pickups back with Hookshot!
+          for (const item of this.pickups) {
+            if (item.alive && item.kind !== 'item_pedestal' && Math.hypot(item.x - p.x, item.y - p.y) < 12) {
+              item.x = p.x;
+              item.y = p.y;
+            }
+          }
+
+          // Check latch onto POST_LATCH or Chests!
+          if (!p.returning) {
+            const hc = Math.floor(p.x / TS);
+            const hr = Math.floor(p.y / TS);
+            const htile = this.room.grid[hr]?.[hc];
+            if (
+              htile === T.POST_LATCH ||
+              htile === T.CHEST_CLOSED ||
+              htile === T.CHEST_OPEN ||
+              htile === T.BIG_CHEST_CLOSED ||
+              htile === T.BIG_CHEST_OPEN
+            ) {
+              p.latched = true;
+              p.vx = 0;
+              p.vy = 0;
+              p.x = hc * TS + 8;
+              p.y = hr * TS + 8;
+              // Snap landing spot slightly in front of post/chest toward hero
+              const ang = Math.atan2(p.owner.y - p.y, p.owner.x - p.x);
+              p.latchX = p.x + Math.cos(ang) * 14;
+              p.latchY = p.y + Math.sin(ang) * 14;
+              FB.audio.play('clink');
+              this.spawnParticles(p.x, p.y, '#fde047', 8, 65, { shape: 'spark' });
+              continue;
+            }
+            if (htile === T.CRYSTAL_BLUE || htile === T.CRYSTAL_RED) {
+              this.flipCrystalSwitch();
+              p.returning = true;
+              continue;
+            }
+            if (
+              p.x < 6 ||
+              p.x > FB.VIEW_W - 6 ||
+              p.y < 6 ||
+              p.y > FB.VIEW_H - 6 ||
+              FB.PROJECTILE_BLOCK_TILES.has(htile)
+            ) {
+              FB.audio.play('clink');
+              p.returning = true;
+              continue;
+            }
+            for (const e of this.enemies) {
+              if (!e.alive) continue;
+              if (Math.hypot(e.x - p.x, e.y - p.y) < e.w * 0.55 + p.radius) {
+                e.hit(p.damage, p.x, p.y, p.owner, this, { stun: 2.2 });
+                e.parryCooldown = 1.5; // Strips Armored Knight guard!
+                p.returning = true;
+                break;
+              }
+            }
           }
           continue;
         }
@@ -2742,6 +2966,38 @@
         ctx.fillRect(-4, -4, 8, 8);
         ctx.fillStyle = '#d49461';
         ctx.fillRect(-3, -3, 4, 3);
+      } else if (p.kind === 'hookshot') {
+        // Draw linked chain back to owner in world coords!
+        ctx.restore();
+        ctx.save();
+        if (p.owner) {
+          const dx = p.x - p.owner.x;
+          const dy = p.y - p.owner.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const links = Math.max(2, Math.floor(dist / 6));
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(Math.round(p.owner.x), Math.round(p.owner.y));
+          ctx.lineTo(Math.round(p.x), Math.round(p.y));
+          ctx.stroke();
+          ctx.fillStyle = '#cbd5e1';
+          for (let i = 1; i < links; i++) {
+            const lx = p.owner.x + (dx * i) / links;
+            const ly = p.owner.y + (dy * i) / links;
+            ctx.fillRect(Math.round(lx) - 1, Math.round(ly) - 1, 2, 2);
+          }
+        }
+        // Claw head
+        const ang = Math.atan2(p.vy || (p.owner ? p.y - p.owner.y : 0), p.vx || (p.owner ? p.x - p.owner.x : 1));
+        ctx.translate(Math.round(p.x), Math.round(p.y));
+        ctx.rotate(ang);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(-3, -4, 5, 2);
+        ctx.fillRect(-3, 2, 5, 2);
+        ctx.fillRect(0, -3, 4, 6);
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(-2, -1, 3, 2);
       }
 
       ctx.restore();

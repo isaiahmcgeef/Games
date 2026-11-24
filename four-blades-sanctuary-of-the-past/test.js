@@ -292,7 +292,38 @@ for (let i = 0; i < 4; i++) {
 assert(h1.rupees > 4, `Expected Rupee Streak bonus (>4), got ${h1.rupees}`);
 console.log('[PASS] Phase 2: Lift/Throw, Bomb Self-Damage, Hurricane, Shop, Sword Beam, Mirror Reflect, Potion & Streaks');
 
-// 8. Visit & render every room in the world
+// 8. Test Phase 3: Act I Complete -> Magic Mirror + Dark World + Hookshot
+g.enterRoom('dg_boss', { col: 10, row: 7 });
+g.bossDefeated = true;
+g.completeAct1();
+assert(g.act1Cleared === true, 'Act I marked cleared');
+assert(h1.items.includes(FB.ITEMS.MIRROR), 'Magic Mirror granted on Act I clear');
+assert(g.room.id === 'ow_start', 'Returned to Sanctuary Courtyard');
+assert(g.room.grid[5][10] === T.PORTAL_DARK, 'Dark World Rift opened in Sanctuary Courtyard');
+
+// Magic Mirror Light <-> Dark Overworld Warp
+g.useMagicMirror(h1);
+assert(g.room.id === 'dw_start', 'Magic Mirror warped to Dark World Twilight Courtyard');
+g.useMagicMirror(h1);
+assert(g.room.id === 'ow_start', 'Magic Mirror warped back to Light Overworld');
+
+// Hookshot Latch & Zip across Crimson Rapids river!
+g.enterRoom('dw_river', { col: 3, row: 3 });
+h1.grantItem(FB.ITEMS.HOOKSHOT);
+h1.dir = FB.DIRS.RIGHT;
+h1.x = 4 * 16 + 8;
+h1.y = 3 * 16 + 8;
+h1.itemCooldown = 0;
+g.useHeroItem(h1);
+const startX = h1.x;
+for (let i = 0; i < 45; i++) {
+  g.updateProjectiles(0.02);
+  g.render();
+}
+assert(h1.x > startX + 70, `Expected Hookshot to zip hero across Crimson Rapids river (moved ${Math.round(h1.x - startX)}px)`);
+console.log('[PASS] Phase 3: Act I Clear, Magic Mirror Light/Dark Warp & Hookshot Grapple');
+
+// 9. Visit & render every room in the world
 for (const id of Object.keys(g.rooms)) {
   g.enterRoom(id, { col: 10, row: 7 });
   g.update(0.02);

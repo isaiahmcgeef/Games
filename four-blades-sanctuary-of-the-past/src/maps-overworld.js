@@ -13,6 +13,7 @@
       area: 'overworld',
       gx: 0,
       gy: 1,
+      mirrorTarget: 'dw_start',
       exits: {
         north: 'ow_palace',
         west: 'ow_woods',
@@ -97,6 +98,7 @@
       area: 'overworld',
       gx: -1,
       gy: 1,
+      mirrorTarget: 'dw_woods',
       exits: {
         east: 'ow_start',
       },
@@ -137,6 +139,7 @@
       area: 'overworld',
       gx: 1,
       gy: 1,
+      mirrorTarget: 'dw_river',
       exits: {
         west: 'ow_start',
       },
@@ -169,6 +172,7 @@
       area: 'overworld',
       gx: 0,
       gy: 0,
+      mirrorTarget: 'dw_spire_approach',
       exits: {
         south: 'ow_start',
       },

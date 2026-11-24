@@ -79,6 +79,14 @@
     SHOP_COUNTER: 46,
     MERCHANT: 47,
     SHOP_FLOOR: 48,
+    POST_LATCH: 49,
+    DARK_GRASS: 50,
+    DARK_TREE: 51,
+    DARK_WATER: 52,
+    DARK_PATH: 53,
+    PORTAL_DARK: 54,
+    PORTAL_FROST: 55,
+    ICE_FLOOR: 56,
   };
 
   FB.SHOP_CATALOG = [
@@ -144,11 +152,15 @@
     FB.TILES.STATUE,
     FB.TILES.SHOP_COUNTER,
     FB.TILES.MERCHANT,
+    FB.TILES.POST_LATCH,
+    FB.TILES.DARK_TREE,
+    FB.TILES.DARK_WATER,
   ]);
 
   // Projectiles can fly over water, pits, bushes, low obstacles
   FB.PROJECTILE_BLOCK_TILES = new Set([
     FB.TILES.TREE,
+    FB.TILES.DARK_TREE,
     FB.TILES.STONE_WALL,
     FB.TILES.CLIFF,
     FB.TILES.DUNGEON_WALL,
@@ -164,6 +176,8 @@
     BOMB: 'bomb',
     BOW: 'bow',
     FIREROD: 'firerod',
+    HOOKSHOT: 'hookshot',
+    MIRROR: 'mirror',
   };
 
   FB.ITEM_META = {
@@ -192,8 +206,22 @@
       id: 'firerod',
       name: 'Ember Rod',
       short: 'FIRE',
-      desc: 'Hurls fireballs that ignite unlit braziers.',
+      desc: 'Hurls fireballs that ignite unlit braziers & melt frost.',
       color: '#f25c54',
+    },
+    hookshot: {
+      id: 'hookshot',
+      name: 'Grappling Hookshot',
+      short: 'HOOK',
+      desc: 'Zips you across pits & rivers to Latch Posts and stuns foes!',
+      color: '#94a3b8',
+    },
+    mirror: {
+      id: 'mirror',
+      name: 'Magic Mirror',
+      short: 'MIRR',
+      desc: 'Warps between the Light & Dark Worlds (or escapes dungeons)!',
+      color: '#c084fc',
     },
   };
 
