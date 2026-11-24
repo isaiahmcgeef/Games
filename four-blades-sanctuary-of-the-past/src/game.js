@@ -1769,12 +1769,14 @@
     render() {
       const ctx = this.ctx;
       ctx.save();
-      ctx.clearRect(0, 0, FB.VIEW_W, FB.VIEW_H);
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = this.room && this.room.area === 'dungeon' ? '#23314d' : '#1f5e2c';
+      ctx.fillRect(0, 0, FB.VIEW_W, FB.VIEW_H);
 
-      // Subtle screen shake
+      // Integer-snapped screen shake so tiles never show subpixel grid seams
       if (this.screenShake > 0.2) {
-        const sx = (Math.random() - 0.5) * this.screenShake;
-        const sy = (Math.random() - 0.5) * this.screenShake;
+        const sx = Math.round((Math.random() - 0.5) * this.screenShake);
+        const sy = Math.round((Math.random() - 0.5) * this.screenShake);
         ctx.translate(sx, sy);
       }
 
