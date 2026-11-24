@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Four Blades: Sanctuary of the Past — 1–4 Player Browser Action-Adventure</title>
+  <meta name="description" content="A browser-based Zelda: A Link to the Past and Four Swords inspired 16-bit action-adventure with optional 1–4 player local multiplayer, dungeons, puzzles, and boss battles." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <!-- Top 16-Bit HUD -->
+    <header class="hud-bar" aria-label="Game Status">
+      <div id="hud-players" class="hud-players"></div>
+      <div class="hud-right">
+        <div class="hud-dungeon-status">
+          <div id="hud-room-name" class="hud-room-name">Sanctuary Courtyard</div>
+          <div class="hud-keys-row">
+            <span class="key-badge">🗝 Keys: <span id="hud-keys">0</span></span>
+            <span id="hud-boss-key" class="boss-key-badge">BOSS KEY —</span>
+          </div>
+        </div>
+        <canvas id="minimap-canvas" width="94" height="58" aria-label="Area Minimap"></canvas>
+        <div class="hud-controls">
+          <button id="btn-pause" class="hud-btn" type="button">PAUSE</button>
+          <button id="btn-music" class="hud-btn" type="button">BGM: ON</button>
+          <button id="btn-mute" class="hud-btn" type="button">SFX: ON</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Crisp Pixel-Art Game Stage -->
+    <section class="stage-frame" aria-label="Game Viewport">
+      <canvas id="game-canvas" width="320" height="208"></canvas>
+
+      <!-- Boss HP Bar -->
+      <div id="boss-bar-wrap" class="boss-bar-wrap hidden">
+        <div class="boss-bar-title">Shadow Wraith Vaalor</div>
+        <div class="boss-bar-track">
+          <div id="boss-bar-fill" class="boss-bar-fill"></div>
+        </div>
+      </div>
+
+      <!-- Non-blocking Toast Banner -->
+      <div id="toast-banner" class="toast-banner hidden"></div>
+
+      <!-- Classic ALttP Dialog Box -->
+      <div id="dialog-box" class="dialog-box hidden" role="dialog" aria-live="polite">
+        <div id="dialog-text" class="dialog-text"></div>
+        <div class="dialog-continue">Press Attack / Space to continue ▼</div>
+      </div>
+
+      <!-- Title & Optional Local Multiplayer Lobby -->
+      <div id="title-overlay" class="overlay">
+        <div class="overlay-card">
+          <div class="crest-emblem" aria-hidden="true">
+            <span class="blade-pip" style="background:#48c764"></span>
+            <span class="blade-pip" style="background:#ef5350"></span>
+            <span class="blade-pip" style="background:#42a5f5"></span>
+            <span class="blade-pip" style="background:#ab72e8"></span>
+          </div>
+          <h1 class="game-title">FOUR BLADES</h1>
+          <p class="game-subtitle">Sanctuary of the Past — ALttP × Four Swords Local Co-op Adventure</p>
+
+          <div class="mode-selector" role="group" aria-label="Select Player Count">
+            <button type="button" class="player-count-btn active" data-players="1">
+              <strong>1 Player</strong>
+              <span>Solo + Spirit Clone</span>
+            </button>
+            <button type="button" class="player-count-btn" data-players="2">
+              <strong>2 Players</strong>
+              <span>Shared Keyboard / Pads</span>
+            </button>
+            <button type="button" class="player-count-btn" data-players="3">
+              <strong>3 Players</strong>
+              <span>Keyboard + Gamepads</span>
+            </button>
+            <button type="button" class="player-count-btn" data-players="4">
+              <strong>4 Players</strong>
+              <span>Full Four Swords Co-op</span>
+            </button>
+          </div>
+
+          <div class="controls-grid">
+            <div class="control-slot slot-active" data-slot="1" style="--slot-color:#48c764">
+              <h3>P1 — Emerald Blade</h3>
+              <p><strong>Move:</strong> WASD (or Arrows in Solo) &nbsp;|&nbsp; <strong>Sword / Hold Spin:</strong> J / Space<br/>
+                 <strong>Item:</strong> K / X &nbsp;|&nbsp; <strong>Dash:</strong> L / C &nbsp;|&nbsp; <strong>Cycle:</strong> U / E &nbsp;|&nbsp; <strong>Clone:</strong> Q / Tab</p>
+            </div>
+            <div class="control-slot" data-slot="2" style="--slot-color:#ef5350">
+              <h3>P2 — Ruby Blade</h3>
+              <p><strong>Move:</strong> Arrow Keys &nbsp;|&nbsp; <strong>Sword / Hold Spin:</strong> Numpad 1 / N / .<br/>
+                 <strong>Item:</strong> Numpad 2 / M / / &nbsp;|&nbsp; <strong>Dash:</strong> Numpad 3 / , &nbsp;|&nbsp; <strong>Cycle:</strong> ;</p>
+            </div>
+            <div class="control-slot" data-slot="3" style="--slot-color:#42a5f5">
+              <h3>P3 — Sapphire Blade</h3>
+              <p><strong>Controller #3:</strong> Stick / D-Pad Move &nbsp;|&nbsp; <strong>A/X:</strong> Sword / Spin<br/>
+                 <strong>B:</strong> Item &nbsp;|&nbsp; <strong>Y/RB:</strong> Dash &nbsp;|&nbsp; <strong>LB:</strong> Cycle Item</p>
+            </div>
+            <div class="control-slot" data-slot="4" style="--slot-color:#ab72e8">
+              <h3>P4 — Amethyst Blade</h3>
+              <p><strong>Controller #4:</strong> Stick / D-Pad Move &nbsp;|&nbsp; <strong>A/X:</strong> Sword / Spin<br/>
+                 <strong>B:</strong> Item &nbsp;|&nbsp; <strong>Y/RB:</strong> Dash &nbsp;|&nbsp; <strong>LB:</strong> Cycle Item</p>
+            </div>
+          </div>
+
+          <div class="lobby-options">
+            <label class="toggle-label">
+              <input id="friendly-fire-toggle" type="checkbox" />
+              Four Swords Chaos (Friendly Sword Bonks drop 5 Rupees)
+            </label>
+            <span id="gamepad-status" class="gamepad-note">Checking controllers…</span>
+          </div>
+
+          <button id="btn-start" type="button" class="btn-primary">EMBARK ON QUEST</button>
+        </div>
+      </div>
+
+      <!-- Pause Overlay -->
+      <div id="pause-overlay" class="overlay hidden">
+        <div class="overlay-card compact">
+          <h2 class="game-title" style="font-size:24px;">PAUSED</h2>
+          <p class="game-subtitle">Press Esc or P anytime to resume your adventure.</p>
+          <div class="stack-btns">
+            <button id="btn-resume" type="button" class="btn-primary">RESUME QUEST</button>
+            <button id="btn-restart-pause" type="button" class="btn-secondary">RESTART RUN</button>
+            <button id="btn-menu-pause" type="button" class="btn-secondary">CHANGE PLAYERS / TITLE</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Over Overlay -->
+      <div id="gameover-overlay" class="overlay hidden">
+        <div class="overlay-card compact">
+          <h2 class="game-title" style="font-size:26px; color:#fca5a5;">HEROES FALLEN</h2>
+          <p class="game-subtitle">Your dungeon keys, unlocked doors, and items remain intact.</p>
+          <div class="stack-btns">
+            <button id="btn-retry" type="button" class="btn-primary">CONTINUE AT ENTRANCE</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Four Swords Victory & MVP Awards Overlay -->
+      <div id="victory-overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <h2 class="game-title">SANCTUARY RESTORED!</h2>
+          <p id="victory-time" class="game-subtitle">Clear Time: 0m 00s</p>
+          <div id="victory-stats" class="victory-stats"></div>
+          <button id="btn-victory-replay" type="button" class="btn-primary">PLAY AGAIN / TITLE SCREEN</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Classic script loading so index.html works BOTH via double-click (file://) and local HTTP server -->
+  <script defer src="src/constants.js"></script>
+  <script defer src="src/audio.js"></script>
+  <script defer src="src/sprites.js"></script>
+  <script defer src="src/input.js"></script>
+  <script defer src="src/maps.js"></script>
+  <script defer src="src/entities.js"></script>
+  <script defer src="src/ui.js"></script>
+  <script defer src="src/game.js"></script>
+</body>
+</html>
