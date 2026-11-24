@@ -28,6 +28,7 @@ const scriptOrder = [
   'saves.js',
   'maps.js',
   'maps-overworld.js',
+  'maps-world-expanded.js',
   'maps-palace.js',
   'maps-darkworld.js',
   'maps-frost.js',
@@ -327,7 +328,7 @@ assert(h1.x > startX + 70, `Expected Hookshot to zip hero across Crimson Rapids 
 console.log('[PASS] Phase 3: Act I Clear, Magic Mirror Light/Dark Warp & Hookshot Grapple');
 
 // 9. Test Phase 4: Frost Spire (Ice Sliding Blocks, Frost Keys, Dynamic Darkness, Cryo-Wyrm Boss, Grand Victory & Hero Mode)
-assert(Object.keys(g.rooms).length === 25, `Expected 25 total rooms, got ${Object.keys(g.rooms).length}`);
+assert(Object.keys(g.rooms).length >= 25, `Expected at least 25 total rooms, got ${Object.keys(g.rooms).length}`);
 
 // 9a. Sliding Ice Block Puzzle in fs_ice_blocks
 g.enterRoom('fs_ice_blocks', { col: 15, row: 6 });
@@ -578,7 +579,68 @@ assert(g.heartPieces === 4 && g.collectedHeartPieces.has('test_hp_4'), 'Heart Pi
 FB.saves.deleteSlot(2);
 console.log('[PASS] Phase 2 Expansion: Wizzrobe, ChuChu Split/Melt, Beamos Bomb Sentry & Heart Pieces');
 
-// 13. Visit & render every room in the world at Hi-Bit 640x416
+// 13. Phase 3 Expansion: 3 Biome Villages, 6 Village Upgrades, Variable/Thin Biomes & 8 Heart Pieces
+assert(Object.keys(g.rooms).length >= 39, `Expected >= 39 rooms after Phase 3, got ${Object.keys(g.rooms).length}`);
+assert(g.rooms.ow_haven.cols === 36 && g.rooms.ow_haven.rows === 22, 'Sanctuary Haven is 36x22 scrolling village');
+assert(g.rooms.ow_ravine.cols === 12 && g.rooms.ow_ravine.rows === 22, 'Whispering Ravine is 12x22 thin vertical corridor');
+assert(g.rooms.ow_mountain_ascent.cols === 14 && g.rooms.ow_mountain_ascent.rows === 24, 'Crag-Peak Ascent is 14x24 thin climb');
+assert(g.rooms.ow_desert.cols === 36 && g.rooms.ow_desert.rows === 20, 'Sunscorched Desert is 36x20 wide expanse');
+
+// Count all seeded Heart Pieces across the world (should be 8 total = +2 full Max Hearts!)
+const totalSeededHP = Object.values(g.rooms).reduce((n, r) => n + (r.heartPieces ? r.heartPieces.length : 0), 0);
+assert(totalSeededHP === 8, `Expected 8 hidden Heart Pieces across world, found ${totalSeededHP}`);
+
+// Test Village Innkeeper free heal & Village-Exclusive Upgrades purchase + gameplay effects!
+g.startNewGame(1, { slotIndex: 2, heroMode: false });
+const vHero = g.humanHeroes[0];
+vHero.rupees = 999;
+vHero.hp = 4;
+g.enterRoom('ow_haven_inn', { col: 9, row: 4 });
+vHero.x = 9 * 16 + 8;
+vHero.y = 3 * 16 + 2;
+vHero.dir = FB.DIRS.UP;
+// Talk to Innkeeper Mara (col 9, row 2) directly
+vHero.y = 2 * 16 + 20;
+assert(g.tryInteract(vHero) === true && vHero.hp === vHero.maxHp, 'Haven Innkeeper heals hero to full hearts for free');
+
+// Buy all 6 Village-Exclusive Upgrades across the 3 village shops!
+const shopsToTest = [
+  ['ow_haven_smith', 'golden_blade', 'goldenBlade'],
+  ['ow_haven_smith', 'pegasus_oil', 'pegasusOil'],
+  ['ow_oasis_shop', 'grip_sandals', 'gripSandals'],
+  ['ow_oasis_shop', 'blue_elixir', 'blueElixir'],
+  ['ow_emberwatch_smith', 'hero_mail', 'heroMail'],
+  ['ow_emberwatch_smith', 'blast_powder', 'blastPowder'],
+];
+for (const [shopRoom, catId, prop] of shopsToTest) {
+  g.enterRoom(shopRoom, { col: 10, row: 7 });
+  const slot = g.room.shopItems.find((s) => s.catalogId === catId);
+  assert(!!slot, `${shopRoom} sells ${catId}`);
+  vHero.x = slot.col * 16 + 8;
+  vHero.y = slot.row * 16 + 10;
+  assert(g.tryBuyShopItem(vHero) === true && vHero[prop] === true, `Purchased ${catId} (${prop}) cleanly`);
+}
+
+// Verify Hero Mail reduces damage & Blue Elixir auto-revives!
+vHero.invuln = 0;
+vHero.hp = 6;
+vHero.damage(2, vHero.x + 10, vHero.y, g);
+assert(vHero.hp === 5, `Hero Mail should reduce 2 damage to 1 (hp=${vHero.hp})`);
+vHero.invuln = 0;
+vHero.potions = 0;
+vHero.hp = 1;
+vHero.damage(4, vHero.x + 10, vHero.y, g);
+assert(vHero.hp === vHero.maxHp && vHero.blueElixir === false, 'Blue Elixir auto-revives hero with full hearts');
+
+// Verify Hot Spring heals in Emberwatch Outpost
+g.enterRoom('ow_emberwatch', { col: 5, row: 2 });
+vHero.hp = 4;
+g.checkHeroTileTriggers(vHero);
+assert(vHero.hp === vHero.maxHp, 'Emberwatch Hot Spring restores full hearts');
+FB.saves.deleteSlot(2);
+console.log('[PASS] Phase 3 Expansion: 3 Biome Villages, 6 Village Upgrades, Thin/Wide Biomes & 8 Heart Pieces');
+
+// 14. Visit & render every room in the world at Hi-Bit 640x416
 for (const id of Object.keys(g.rooms)) {
   const r = g.rooms[id];
   g.enterRoom(id, { col: Math.floor((r.cols || 20) / 2), row: Math.floor((r.rows || 13) / 2) });

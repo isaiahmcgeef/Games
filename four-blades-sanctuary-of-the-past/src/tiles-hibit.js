@@ -29,6 +29,12 @@
     T.BIG_CHEST_OPEN,
     T.SHOP_COUNTER,
     T.ROCK_CRACKED,
+    T.HOUSE_WALL,
+    T.HOUSE_ROOF,
+    T.FOUNTAIN,
+    T.CACTUS,
+    T.DESERT_RUIN,
+    T.MOUNTAIN_ROCK,
   ]);
 
   const WALKABLE_SHADOW_RECEIVERS = new Set([
@@ -50,6 +56,16 @@
     T.STAIRS_UP,
     T.PORTAL_OVERWORLD,
     T.TRIFORCE_ALTAR,
+    T.TOWN_COBBLE,
+    T.PORTAL_HOUSE,
+    T.HOT_SPRING,
+    T.DOCK_WOOD,
+    T.SAND,
+    T.SAND_PATH,
+    T.PORTAL_DESERT,
+    T.MOUNTAIN_GROUND,
+    T.PORTAL_MAGMA,
+    T.PORTAL_ARENA,
   ]);
 
   class HiBitTileRenderer {
@@ -149,8 +165,108 @@
         this._drawFrostFloor(ctx, ox, oy, h);
       } else if (area === 'shop') {
         this._drawShopFloor(ctx, ox, oy, h);
+      } else if (area === 'village') {
+        this._drawTownCobble(ctx, ox, oy, h);
+      } else if (area === 'desert') {
+        this._drawSand(ctx, ox, oy, h);
+      } else if (area === 'mountain') {
+        this._drawMountainGround(ctx, ox, oy, h);
+      } else if (area === 'desert_dungeon') {
+        this._drawDesertDungeonFloor(ctx, ox, oy, h);
+      } else if (area === 'magma') {
+        this._drawMagmaDungeonFloor(ctx, ox, oy, h);
       } else {
         this._drawDungeonFloor(ctx, ox, oy, h);
+      }
+    }
+
+    _drawTownCobble(ctx, ox, oy, h) {
+      const px = (x, y, w, h2, col) => this._px(ctx, ox, oy, x, y, w, h2, col);
+      const v = h % 4;
+      px(0, 0, 32, 32, '#8b7d6b');
+      const stones = [
+        [1, 1, 14, 9],
+        [17, 1, 14, 9],
+        [0, 12, 9, 9],
+        [11, 12, 12, 9],
+        [25, 12, 7, 9],
+        [2, 23, 13, 8],
+        [17, 23, 13, 8],
+      ];
+      for (let i = 0; i < stones.length; i++) {
+        const [sx, sy, sw, sh] = stones[i];
+        px(sx, sy, sw, sh, (i + v) % 2 === 0 ? '#b8aa96' : '#a89a86');
+        px(sx, sy, sw, 2, '#d4c8b4');
+        px(sx, sy + sh - 1, sw, 1, '#756858');
+      }
+      if (v === 2) {
+        px(15, 11, 2, 2, '#4ea344'); // Tiny moss sprig between cobblestones
+      }
+    }
+
+    _drawSand(ctx, ox, oy, h) {
+      const px = (x, y, w, h2, col) => this._px(ctx, ox, oy, x, y, w, h2, col);
+      const v = h % 6;
+      px(0, 0, 32, 32, '#e2b969');
+      // Soft wind-rippled desert dunes
+      px(0, 5 + (v % 3) * 2, 32, 3, '#ecc87b');
+      px(0, 8 + (v % 3) * 2, 32, 1, '#c99c4d');
+      px(0, 20 + ((v + 1) % 3) * 2, 32, 3, '#ecc87b');
+      px(0, 23 + ((v + 1) % 3) * 2, 32, 1, '#c99c4d');
+      if (v === 1 || v === 4) {
+        px(8, 13, 4, 2, '#b88a3d');
+        px(9, 12, 2, 1, '#f7df9c');
+      } else if (v === 3) {
+        px(21, 15, 3, 2, '#b88a3d');
+        px(22, 14, 1, 1, '#f7df9c');
+      }
+    }
+
+    _drawMountainGround(ctx, ox, oy, h) {
+      const px = (x, y, w, h2, col) => this._px(ctx, ox, oy, x, y, w, h2, col);
+      const v = h % 5;
+      px(0, 0, 32, 32, '#6d5144');
+      px(2 + v * 2, 4, 10, 6, '#7c5d4e');
+      px(16 - v, 18, 12, 7, '#5c4338');
+      px(5, 22, 4, 3, '#47332a');
+      px(6, 21, 3, 2, '#997a6b');
+      if (v === 2 || v === 4) {
+        px(22, 8, 4, 2, '#8c6d5d');
+        px(23, 7, 2, 1, '#b59889');
+      }
+    }
+
+    _drawDesertDungeonFloor(ctx, ox, oy, h) {
+      const px = (x, y, w, h2, col) => this._px(ctx, ox, oy, x, y, w, h2, col);
+      const v = h % 4;
+      px(0, 0, 32, 32, '#876238');
+      px(1, 1, 14, 14, v === 0 ? '#a67b49' : '#9c7243');
+      px(17, 1, 14, 14, '#946b3e');
+      px(1, 17, 14, 14, '#946b3e');
+      px(17, 17, 14, 14, v === 2 ? '#a67b49' : '#9c7243');
+      px(1, 1, 14, 1, '#c79b65');
+      px(17, 1, 14, 1, '#c79b65');
+      px(1, 17, 14, 1, '#c79b65');
+      px(17, 17, 14, 1, '#c79b65');
+      if (v === 3) {
+        px(12, 11, 8, 2, '#e2b969'); // Drifted sand grain
+      }
+    }
+
+    _drawMagmaDungeonFloor(ctx, ox, oy, h) {
+      const px = (x, y, w, h2, col) => this._px(ctx, ox, oy, x, y, w, h2, col);
+      const v = h % 4;
+      px(0, 0, 32, 32, '#24171a');
+      px(1, 1, 14, 14, v === 0 ? '#3b2529' : '#332023');
+      px(17, 1, 14, 14, '#2e1c1f');
+      px(1, 17, 14, 14, '#2e1c1f');
+      px(17, 17, 14, 14, v === 2 ? '#3b2529' : '#332023');
+      px(1, 1, 14, 1, '#57393f');
+      px(17, 17, 14, 1, '#57393f');
+      if (v === 1) {
+        // Faint glowing ember seam
+        px(15, 6, 2, 6, '#9a3412');
+        px(15, 8, 2, 2, '#f97316');
       }
     }
 
@@ -668,6 +784,8 @@
 
         case T.DUNGEON_FLOOR:
           if (isFrost) this._drawFrostFloor(ctx, ox, oy, h);
+          else if (area === 'desert_dungeon') this._drawDesertDungeonFloor(ctx, ox, oy, h);
+          else if (area === 'magma') this._drawMagmaDungeonFloor(ctx, ox, oy, h);
           else this._drawDungeonFloor(ctx, ox, oy, h);
           break;
 
@@ -679,8 +797,7 @@
             px(0, 0, 32, 32, '#13314d');
             px(0, 0, 32, 6, '#5ca4d6');
             px(0, 0, 32, 2, '#bae6fd');
-            px(0, 6, 32, 2, '#e0f2fe'); // crystalline cornice trim
-            // Faceted glacial bricks
+            px(0, 6, 32, 2, '#e0f2fe');
             const bricks = [
               [1, 9, 14, 9],
               [17, 9, 14, 9],
@@ -694,7 +811,6 @@
               px(bx, by, bw, 2, '#3b7eb0');
               px(bx, by + bh - 1, bw, 1, '#0d2236');
             }
-            // Hanging crystalline pixel icicles along south-facing ledges!
             if (southFloor) {
               px(0, 29, 32, 3, '#0a1c2e');
               const icicles = [4, 11, 19, 26];
@@ -705,12 +821,61 @@
                 px(ix + 1, 26, 1, Math.min(6, len), '#f0f9ff');
               }
             }
+          } else if (area === 'desert_dungeon') {
+            // Sunspire Desert Temple Carved Sandstone + Solar Gold Cornice!
+            px(0, 0, 32, 32, '#5c3c1e');
+            px(0, 0, 32, 6, '#c48f45');
+            px(0, 0, 32, 2, '#ecc072');
+            px(0, 6, 32, 2, '#facc15');
+            const bricks = [
+              [1, 9, 14, 9],
+              [17, 9, 14, 9],
+              [0, 20, 11, 9],
+              [13, 20, 12, 9],
+              [27, 20, 5, 9],
+            ];
+            for (let i = 0; i < bricks.length; i++) {
+              const [bx, by, bw, bh] = bricks[i];
+              px(bx, by, bw, bh, (i + v) % 2 === 0 ? '#9c6c36' : '#8a5d2c');
+              px(bx, by, bw, 2, '#bd894a');
+              px(bx, by + bh - 1, bw, 1, '#4a2e14');
+            }
+            if (v === 1) {
+              // Carved hieroglyph sun mark
+              px(13, 12, 6, 4, '#d97706');
+              px(15, 13, 2, 2, '#fde047');
+            }
+            if (southFloor) px(0, 29, 32, 3, '#3b2410');
+          } else if (area === 'magma') {
+            // Magma Citadel Volcanic Obsidian Masonry + Molten Rim!
+            px(0, 0, 32, 32, '#1c0f12');
+            px(0, 0, 32, 6, '#59292e');
+            px(0, 0, 32, 2, '#823f46');
+            px(0, 6, 32, 2, '#ea580c');
+            const bricks = [
+              [1, 9, 14, 9],
+              [17, 9, 14, 9],
+              [0, 20, 11, 9],
+              [13, 20, 12, 9],
+              [27, 20, 5, 9],
+            ];
+            for (let i = 0; i < bricks.length; i++) {
+              const [bx, by, bw, bh] = bricks[i];
+              px(bx, by, bw, bh, (i + v) % 2 === 0 ? '#381e22' : '#2e181c');
+              px(bx, by, bw, 2, '#573137');
+              px(bx, by + bh - 1, bw, 1, '#12090b');
+            }
+            if (v === 2) {
+              px(18, 12, 2, 5, '#ea580c');
+              px(19, 14, 1, 2, '#fde047');
+            }
+            if (southFloor) px(0, 29, 32, 3, '#12080a');
           } else {
             // Palace of the Four Seals Royal Sapphire Masonry + Gold Trim
             px(0, 0, 32, 32, '#1c2840');
             px(0, 0, 32, 6, '#486899');
             px(0, 0, 32, 2, '#698ec4');
-            px(0, 6, 32, 2, '#d4af4c'); // Golden palace molding
+            px(0, 6, 32, 2, '#d4af4c');
             px(0, 7, 32, 1, '#8f7024');
             const bricks = [
               [1, 9, 14, 9],
@@ -729,7 +894,6 @@
               px(0, 29, 32, 3, '#111826');
             }
             if (v === 3) {
-              // Subtle weathered crack
               px(20, 12, 2, 4, '#131b2b');
               px(21, 15, 3, 2, '#131b2b');
             }
@@ -1279,6 +1443,238 @@
           break;
         }
 
+        case T.TOWN_COBBLE:
+          this._drawTownCobble(ctx, ox, oy, h);
+          break;
+
+        case T.HOUSE_WALL: {
+          // Warm timber-framed village cottage wall (cream stucco / adobe in desert / stone in mountain)
+          const wallBg = area === 'desert' ? '#e3c088' : area === 'mountain' ? '#7a6860' : '#eadcc4';
+          const wallShade = area === 'desert' ? '#c2995d' : area === 'mountain' ? '#594b45' : '#cfc0a5';
+          const beamCol = area === 'desert' ? '#8c5327' : '#57361e';
+          px(0, 0, 32, 32, wallBg);
+          px(0, 26, 32, 6, wallShade);
+          px(0, 0, 32, 3, beamCol);
+          px(0, 24, 32, 2, beamCol);
+          px(0, 0, 3, 32, beamCol);
+          px(29, 0, 3, 32, beamCol);
+          if (h % 2 === 0) {
+            // Cozy lit window pane!
+            px(8, 7, 16, 13, '#3b2413');
+            px(10, 9, 12, 9, '#fde047');
+            px(15, 9, 2, 9, '#3b2413');
+            px(10, 13, 12, 2, '#3b2413');
+            px(11, 10, 3, 2, '#fefce8');
+          }
+          break;
+        }
+
+        case T.HOUSE_ROOF: {
+          // Shingled roof (terracotta in Haven, azure cloth awning in Oasis, slate-crimson in Emberwatch)
+          const rDark = area === 'desert' ? '#1e40af' : area === 'mountain' ? '#5c1c1c' : '#8a2b2b';
+          const rMid = area === 'desert' ? '#2563eb' : area === 'mountain' ? '#8c2d2d' : '#b83c3c';
+          const rHi = area === 'desert' ? '#60a5fa' : area === 'mountain' ? '#c25148' : '#de6254';
+          px(0, 0, 32, 32, rDark);
+          for (let sy = 0; sy < 32; sy += 8) {
+            px(0, sy, 32, 6, rMid);
+            px(0, sy, 32, 2, rHi);
+            for (let sx = (sy % 16 === 0 ? 0 : 4); sx < 32; sx += 8) {
+              px(sx, sy + 2, 1, 5, rDark);
+            }
+          }
+          if (s === T.HOUSE_WALL || s === T.PORTAL_HOUSE) {
+            px(0, 29, 32, 3, '#3b1515');
+          }
+          break;
+        }
+
+        case T.PORTAL_HOUSE: {
+          this._drawBiomeFloor(ctx, ox, oy, area, h);
+          // Inviting arched timber house doorway with lantern glow
+          px(2, 0, 28, 32, '#4a2e18');
+          px(5, 3, 22, 29, '#1f1209');
+          px(7, 5, 18, 27, '#754622');
+          px(9, 7, 14, 25, '#2b190d');
+          px(10, 9, 12, 10, 'rgba(253, 224, 71, 0.25)');
+          px(21, 18, 2, 3, '#facc15'); // brass knob
+          break;
+        }
+
+        case T.NPC_VILLAGER: {
+          this._drawBiomeFloor(ctx, ox, oy, area, h);
+          const v = h % 3;
+          const cloak = area === 'desert' ? '#0284c7' : area === 'mountain' ? '#b45309' : v === 0 ? '#2563eb' : v === 1 ? '#16a34a' : '#9333ea';
+          const hat = area === 'desert' ? '#fef08a' : area === 'mountain' ? '#7c2d12' : '#d97706';
+          // Ground shadow
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+          ctx.beginPath();
+          ctx.ellipse(ox + 16, oy + 27, 9, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+          // Outlined crisp Hi-Bit Villager
+          px(9, 5, 14, 23, '#141824');
+          px(10, 14, 12, 13, cloak);
+          px(11, 14, 10, 3, '#fde047'); // sash
+          px(11, 7, 10, 7, '#f6c79c'); // face
+          px(12, 10, 2, 2, '#141824'); // eyes
+          px(18, 10, 2, 2, '#141824');
+          px(9, 4, 14, 4, hat); // cap / turban / hood
+          px(11, 3, 10, 2, '#fef9c3');
+          break;
+        }
+
+        case T.FOUNTAIN: {
+          this._drawTownCobble(ctx, ox, oy, h);
+          // Carved marble village healing fountain
+          px(2, 4, 28, 25, '#475569');
+          px(3, 5, 26, 22, '#94a3b8');
+          px(5, 7, 22, 18, '#0ea5e9');
+          px(7, 9, 18, 14, '#38bdf8');
+          px(12, 4, 8, 16, '#cbd5e1');
+          px(13, 3, 6, 4, '#f8fafc');
+          px(14, 6, 4, 6, '#bae6fd');
+          break;
+        }
+
+        case T.HOT_SPRING: {
+          // Steaming mineral turquoise mountain hot spring (walkable healer!)
+          px(0, 0, 32, 32, '#5c4338');
+          px(2, 2, 28, 28, '#0891b2');
+          px(4, 4, 24, 24, '#22d3ee');
+          px(7, 7, 18, 14, '#67e8f9');
+          px(9, 10, 8, 3, '#cffafe');
+          break;
+        }
+
+        case T.WATERFALL: {
+          // Roaring vertical sapphire waterfall cascade
+          px(0, 0, 32, 32, '#1d6ec2');
+          px(3, 0, 6, 32, '#38bdf8');
+          px(13, 0, 7, 32, '#7dd3fc');
+          px(24, 0, 5, 32, '#38bdf8');
+          px(5, 0, 2, 32, '#e0f2fe');
+          px(15, 0, 3, 32, '#ffffff');
+          px(0, 26, 32, 6, '#bae6fd');
+          break;
+        }
+
+        case T.DOCK_WOOD: {
+          // Sturdy weathered timber lakefront dock planks over water
+          px(0, 0, 32, 32, '#1d6ec2');
+          px(0, 1, 32, 30, '#59381f');
+          for (let py = 2; py < 30; py += 7) {
+            px(1, py, 30, 5, '#8c5a32');
+            px(1, py, 30, 1, '#b57b4a');
+            px(4, py + 2, 2, 2, '#3b2413');
+            px(26, py + 2, 2, 2, '#3b2413');
+          }
+          break;
+        }
+
+        case T.SAND:
+          this._drawSand(ctx, ox, oy, h);
+          break;
+
+        case T.SAND_PATH: {
+          this._drawSand(ctx, ox, oy, h);
+          px(2, 2, 28, 28, '#c79750');
+          px(3, 3, 12, 12, '#d9ab62');
+          px(17, 3, 12, 12, '#cfa057');
+          px(3, 17, 12, 12, '#cfa057');
+          px(17, 17, 12, 12, '#d9ab62');
+          px(3, 3, 12, 1, '#edd093');
+          px(17, 17, 12, 1, '#edd093');
+          break;
+        }
+
+        case T.CACTUS: {
+          this._drawSand(ctx, ox, oy, h);
+          // Outlined desert saguaro cactus
+          px(11, 3, 10, 27, '#14381d');
+          px(4, 11, 8, 9, '#14381d');
+          px(20, 9, 8, 9, '#14381d');
+          px(12, 4, 8, 25, '#2b8a3e');
+          px(5, 12, 7, 7, '#2b8a3e');
+          px(20, 10, 7, 7, '#2b8a3e');
+          px(14, 5, 2, 23, '#51cf66');
+          px(13, 8, 1, 1, '#fef08a');
+          px(18, 14, 1, 1, '#fef08a');
+          px(13, 21, 1, 1, '#fef08a');
+          break;
+        }
+
+        case T.DESERT_RUIN: {
+          this._drawSand(ctx, ox, oy, h);
+          // Weathered ancient sandstone obelisk / ruin column
+          px(3, 2, 26, 28, '#4a2e14');
+          px(4, 3, 24, 26, '#9c6c36');
+          px(6, 4, 20, 6, '#d9ab62');
+          px(6, 12, 20, 14, '#b58143');
+          px(11, 15, 10, 6, '#784e23');
+          px(13, 17, 6, 2, '#facc15');
+          break;
+        }
+
+        case T.PORTAL_DESERT: {
+          // Grand Sunspire Pyramid Temple Entrance
+          px(0, 0, 32, 32, '#784e23');
+          px(1, 0, 30, 6, '#facc15');
+          px(2, 1, 28, 3, '#fef08a');
+          px(4, 6, 24, 26, '#4a2e14');
+          px(8, 10, 16, 22, '#1c0f06');
+          px(12, 12, 8, 4, '#f59e0b');
+          break;
+        }
+
+        case T.MOUNTAIN_GROUND:
+          this._drawMountainGround(ctx, ox, oy, h);
+          break;
+
+        case T.MOUNTAIN_ROCK: {
+          const v = h % 4;
+          // Jagged volcanic basalt crag & cliff wall
+          px(0, 0, 32, 32, '#291c18');
+          px(1, 1, 30, 28, '#4a352d');
+          px(2, 2, 28, 10, '#6e5247');
+          px(4, 3, 22, 4, '#8f6e60');
+          px(2, 14, 13, 13, v % 2 === 0 ? '#5c4339' : '#523b32');
+          px(17, 14, 13, 13, v % 2 === 0 ? '#523b32' : '#5c4339');
+          px(0, 29, 32, 3, '#1c120f');
+          break;
+        }
+
+        case T.LAVA: {
+          // Glowing bubbling volcanic magma pool
+          px(0, 0, 32, 32, '#991b1b');
+          px(2, 2, 28, 28, '#dc2626');
+          px(4, 5, 12, 8, '#ea580c');
+          px(16, 17, 12, 9, '#ea580c');
+          px(7, 7, 6, 4, '#facc15');
+          px(19, 19, 6, 4, '#facc15');
+          break;
+        }
+
+        case T.PORTAL_MAGMA: {
+          // Obsidian Magma Citadel Gate
+          px(0, 0, 32, 32, '#241012');
+          px(1, 0, 30, 6, '#ea580c');
+          px(2, 1, 28, 3, '#facc15');
+          px(4, 6, 24, 26, '#3b1518');
+          px(8, 10, 16, 22, '#140607');
+          px(11, 12, 10, 4, '#f97316');
+          break;
+        }
+
+        case T.PORTAL_ARENA: {
+          // Sanctuary Arena Colloseum Archway
+          px(0, 0, 32, 32, '#334155');
+          px(1, 0, 30, 6, '#eab308');
+          px(2, 1, 28, 3, '#fef08a');
+          px(4, 6, 24, 26, '#1e293b');
+          px(8, 10, 16, 22, '#0f172a');
+          px(11, 13, 10, 3, '#ef4444');
+          break;
+        }
+
         default:
           this._drawBiomeFloor(ctx, ox, oy, area, h);
       }
@@ -1313,6 +1709,25 @@
               ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
               ctx.fillRect(dx + 8 + (wave % 4) * 3, dy + 14, 4, 2);
             }
+          } else if (id === T.WATERFALL) {
+            const drop = Math.floor(time * 28 + c * 5) % 16;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+            ctx.fillRect(dx + 5, dy + drop, 4, 8);
+            ctx.fillRect(dx + 15, dy + ((drop + 8) % 24), 4, 8);
+            ctx.fillRect(dx + 23, dy + ((drop + 4) % 20), 3, 7);
+          } else if (id === T.LAVA) {
+            const pulse = Math.sin(time * 3.6 + c * 1.3 + r * 0.9);
+            ctx.fillStyle = pulse > 0 ? 'rgba(253, 224, 71, 0.6)' : 'rgba(251, 146, 60, 0.5)';
+            const bx = dx + 6 + (Math.floor(time * 2 + c * 3) % 14);
+            const by = dy + 8 + (Math.floor(time * 1.5 + r * 5) % 12);
+            ctx.fillRect(bx, by, 6, 4);
+            ctx.fillStyle = '#fefce8';
+            ctx.fillRect(bx + 2, by + 1, 2, 2);
+          } else if (id === T.FOUNTAIN || id === T.HOT_SPRING) {
+            const sp = Math.floor(time * 6 + c) % 4;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillRect(dx + 12 + sp, dy + 4 + (sp % 2) * 3, 4, 2);
+            ctx.fillRect(dx + 18 - sp, dy + 12 - (sp % 2) * 2, 3, 2);
           } else if (id === T.GRASS_FLOWERS) {
             const sway = Math.round(Math.sin(time * 2.8 + c * 1.1 + r * 0.9));
             if (sway !== 0) {
@@ -1323,20 +1738,17 @@
             }
           } else if (id === T.TORCH_LIT) {
             const f = Math.floor(time * 13 + c * 5 + r * 3) % 4;
-            const ox = f === 1 ? 2 : f === 3 ? -2 : 0;
+            const tx = f === 1 ? 2 : f === 3 ? -2 : 0;
             const fh = f % 2 === 0 ? 10 : 12;
-            // Multi-layered crisp pixel flame
             ctx.fillStyle = '#ea580c';
             ctx.fillRect(dx + 10, dy + 13 - fh, 12, fh);
             ctx.fillStyle = '#facc15';
-            ctx.fillRect(dx + 12 + ox, dy + 12 - fh, 8, fh - 2);
+            ctx.fillRect(dx + 12 + tx, dy + 12 - fh, 8, fh - 2);
             ctx.fillStyle = '#fefce8';
             ctx.fillRect(dx + 14, dy + 7, 4, 5);
-            // Rising ember spark
             const ey = Math.floor(time * 20 + c * 7) % 14;
             ctx.fillStyle = 'rgba(253, 224, 71, 0.85)';
             ctx.fillRect(dx + 15 + (ey % 2 === 0 ? 2 : -2), dy + 5 - ey, 2, 2);
-            // Warm flickering radial torchlight halo
             const glowR = 34 + Math.sin(time * 11 + c * 2) * 4;
             const grad = ctx.createRadialGradient(dx + 16, dy + 10, 4, dx + 16, dy + 10, glowR);
             grad.addColorStop(0, 'rgba(255, 190, 70, 0.24)');

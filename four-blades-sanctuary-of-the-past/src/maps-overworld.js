@@ -18,6 +18,7 @@
         north: 'ow_palace',
         west: 'ow_woods',
         east: 'ow_river',
+        south: { target: 'ow_haven', targetCol: 17, targetRow: 1 },
       },
       portals: [{ col: 16, row: 1, targetRoom: 'ow_shop', targetCol: 10, targetRow: 10 }],
       grid: parseGrid([
@@ -32,19 +33,19 @@
         'T..bb...pppp...bb..T',
         'T..o....p,,p....o..T',
         'T....,..pppp..,....T',
-        'T..bbb........bbb..T',
-        'TTTTTTTTTTTTTTTTTTTT',
+        'T..bbb..pppp..bbb..T',
+        'TTTTTTTTTppTTTTTTTTT',
       ]),
       signs: [
         {
           col: 9,
           row: 3,
-          text: 'FOUR BLADES SANCTUARY: Claim Boomerang & Bombs, visit the Shop to the NE for Upgrades, then enter the Palace North!',
+          text: 'FOUR BLADES SANCTUARY: Claim Boomerang & Bombs! South leads to Sanctuary Haven Village, Desert & Peaks; North leads to Palace #1!',
         },
         {
           col: 10,
           row: 3,
-          text: 'TIP: Tap Attack for a 3-Hit Combo! Press F (P1) to Lift & Throw pots, bombs, stunned foes & teammates! Press Q for Solo Spirit Clone!',
+          text: 'TIP: Press M anytime for the World Map & Quest Journal! Tap Attack for a 3-Hit Combo, F to Lift/Throw, Q for Solo Spirit Clone!',
         },
       ],
       pedestals: [
@@ -101,6 +102,7 @@
       mirrorTarget: 'dw_woods',
       exits: {
         east: 'ow_start',
+        south: { target: 'ow_deepwoods', targetCol: 14, targetRow: 1 },
       },
       grid: parseGrid([
         'TTTTTTTTTTTTTTTTTTTT',
@@ -114,8 +116,8 @@
         'T..,..bbb..p....,..T',
         'T......b...p..bb...T',
         'T..o.......p...o...T',
-        'T....,,........,,..T',
-        'TTTTTTTTTTTTTTTTTTTT',
+        'T....,,..pp....,,..T',
+        'TTTTTTTTTppTTTTTTTTT',
       ]),
       pedestals: [{ col: 3, row: 2, itemId: FB.ITEMS.FIREROD }],
       chests: [
@@ -144,6 +146,8 @@
       mirrorTarget: 'dw_river',
       exits: {
         west: 'ow_start',
+        east: { target: 'ow_lake', targetCol: 1, targetRow: 7 },
+        south: { target: 'ow_ravine', targetCol: 6, targetRow: 1 },
       },
       grid: parseGrid([
         'TTTTTTTTTTTTTTTTTTTT',
@@ -152,13 +156,13 @@
         'T..pp..~..1..SggSSST',
         'T..pp..~.....pppp..T',
         'T..pp..~.....p.....T',
-        'ppppp===pppppp..bb.T',
-        'ppppp===pppppp..bb.T',
+        'ppppp===pppppppppppp',
+        'ppppp===pppppppppppp',
         'T..b...~..p........T',
         'T..b...~..pppp.....T',
-        'T......~.....p..o..T',
-        'T..,..~~~....,,....T',
-        'TTTTTTTTTTTTTTTTTTTT',
+        'T......~..pp.p..o..T',
+        'T..,..~~~.pp.,,....T',
+        'TTTTTTTTTTppTTTTTTTT',
       ]),
       pedestals: [{ col: 16, row: 1, itemId: FB.ITEMS.BOW }],
       heartPieces: [{ id: 'hp_river', col: 2, row: 11 }],

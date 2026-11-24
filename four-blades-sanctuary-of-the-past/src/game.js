@@ -715,10 +715,17 @@
         return T.DARK_GRASS;
       }
       if (area === 'shop' || room.id === 'ow_shop') return T.SHOP_FLOOR;
+      if (area === 'village') {
+        return countAdj(T.TOWN_COBBLE) >= 2 ? T.TOWN_COBBLE : isPath ? T.PATH : T.GRASS;
+      }
+      if (area === 'desert') {
+        return isPath || countAdj(T.SAND_PATH) >= 2 ? T.SAND_PATH : T.SAND;
+      }
+      if (area === 'mountain') return T.MOUNTAIN_GROUND;
       if (area === 'frost') {
         return countAdj(T.ICE_FLOOR) >= 2 ? T.ICE_FLOOR : T.DUNGEON_FLOOR;
       }
-      if (area === 'dungeon') return T.DUNGEON_FLOOR;
+      if (area === 'dungeon' || area === 'desert_dungeon' || area === 'magma') return T.DUNGEON_FLOOR;
       if (isPath || countAdj(T.PATH) >= 2) return T.PATH;
       return T.GRASS;
     }
@@ -971,11 +978,11 @@
         const len = Math.hypot(ddx, ddy) || 1;
         hero.dashDx = ddx / len;
         hero.dashDy = ddy / len;
-        hero.dashTimer = FB.CONFIG.DASH_DURATION;
-        hero.dashCooldown = FB.CONFIG.DASH_COOLDOWN;
+        hero.dashTimer = FB.CONFIG.DASH_DURATION * (hero.pegasusOil ? 1.25 : 1.0);
+        hero.dashCooldown = FB.CONFIG.DASH_COOLDOWN * (hero.pegasusOil ? 0.55 : 1.0);
         hero.dashDustTick = 0;
         FB.audio.play('dash');
-        this.spawnParticles(hero.x, hero.y + 4, '#e2e8f0', 6, 38, { shape: 'dust' });
+        this.spawnParticles(hero.x, hero.y + 4, hero.pegasusOil ? '#7dd3fc' : '#e2e8f0', 6, 38, { shape: 'dust' });
       }
 
       // Sword attack + Charge Spin Attack (if carrying, pressing attack throws!)
@@ -1029,7 +1036,8 @@
         }
       } else {
         const carryMult = hero.carrying ? 0.82 : 1.0;
-        const speedMult = (hero.spinCharge > 0.15 ? 0.65 : hero.swordTimer > 0 ? 0.5 : 1.0) * carryMult;
+        const gripMult = hero.gripSandals ? 1.12 : 1.0;
+        const speedMult = (hero.spinCharge > 0.15 ? 0.65 : hero.swordTimer > 0 ? 0.5 : 1.0) * carryMult * gripMult;
         vx = inp.dx * FB.CONFIG.PLAYER_SPEED * speedMult;
         vy = inp.dy * FB.CONFIG.PLAYER_SPEED * speedMult;
         if (inp.dx !== 0 || inp.dy !== 0) {
@@ -1040,11 +1048,11 @@
           }
         }
 
-        // Slippery Ice Floor momentum glide!
+        // Slippery Ice Floor momentum glide (negated by Oasis Bazaar Grip Sandals!)
         const underCol = Math.floor(hero.x / TS);
         const underRow = Math.floor(hero.y / TS);
         const onIce = this.room?.grid[underRow]?.[underCol] === T.ICE_FLOOR;
-        if (onIce && !hero.hookZipping) {
+        if (onIce && !hero.hookZipping && !hero.gripSandals) {
           const blend = Math.min(1, dt * (inp.dx !== 0 || inp.dy !== 0 ? 3.8 : 2.1));
           hero.iceVx += (vx - hero.iceVx) * blend;
           hero.iceVy += (vy - hero.iceVy) * blend;
@@ -1224,8 +1232,8 @@
         const dv = FB.DIR_VEC[hero.dir] || FB.DIR_VEC[0];
         this.spawnParticles(hero.x + dv.x * 16, hero.y + dv.y * 16, '#fde047', 6, 55, { shape: 'spark', life: 0.18 });
 
-        // Full-Health Master Sword Beam (with Tempered Blade upgrade!)
-        if (hero.temperedSword && hero.hp >= hero.maxHp && !hero.isClone) {
+        // Full-Health Master Sword Beam (with Tempered Blade or Golden Master Blade!)
+        if ((hero.temperedSword || hero.goldenBlade) && hero.hp >= hero.maxHp && !hero.isClone) {
           this.projectiles.push(
             new FB.Projectile({
               kind: 'beam',
@@ -1235,7 +1243,7 @@
               vy: dv.y * 235,
               owner: hero,
               life: 0.95,
-              damage: 3,
+              damage: hero.goldenBlade ? 4 : 3,
               radius: 6,
             })
           );
@@ -1447,8 +1455,32 @@
             this.showToast('You already wield the Mirror Shield!', 2.0);
             return true;
           }
-          if (item.id === 'tempered_sword' && hero.temperedSword) {
+          if (item.id === 'tempered_sword' && (hero.temperedSword || hero.goldenBlade)) {
             this.showToast('Your blade is already Tempered!', 2.0);
+            return true;
+          }
+          if (item.id === 'golden_blade' && hero.goldenBlade) {
+            this.showToast('You already wield the Golden Master Blade!', 2.0);
+            return true;
+          }
+          if (item.id === 'pegasus_oil' && hero.pegasusOil) {
+            this.showToast('Pegasus Oil is already active!', 2.0);
+            return true;
+          }
+          if (item.id === 'grip_sandals' && hero.gripSandals) {
+            this.showToast('You are already wearing Grip Sandals!', 2.0);
+            return true;
+          }
+          if (item.id === 'blue_elixir' && hero.blueElixir) {
+            this.showToast('You already carry a Blue Elixir!', 2.0);
+            return true;
+          }
+          if (item.id === 'hero_mail' && hero.heroMail) {
+            this.showToast("You are already wearing Hero's Mail Armor!", 2.0);
+            return true;
+          }
+          if (item.id === 'blast_powder' && hero.blastPowder) {
+            this.showToast('Blast Powder is already upgrading your Bombs!', 2.0);
             return true;
           }
           if (item.id === 'heal' && hero.hp >= hero.maxHp) {
@@ -1474,6 +1506,21 @@
             for (const h of this.humanHeroes) h.mirrorShield = true;
           } else if (item.id === 'tempered_sword') {
             for (const h of this.humanHeroes) h.temperedSword = true;
+          } else if (item.id === 'golden_blade') {
+            for (const h of this.humanHeroes) {
+              h.goldenBlade = true;
+              h.temperedSword = true;
+            }
+          } else if (item.id === 'pegasus_oil') {
+            for (const h of this.humanHeroes) h.pegasusOil = true;
+          } else if (item.id === 'grip_sandals') {
+            for (const h of this.humanHeroes) h.gripSandals = true;
+          } else if (item.id === 'blue_elixir') {
+            hero.blueElixir = true;
+          } else if (item.id === 'hero_mail') {
+            for (const h of this.humanHeroes) h.heroMail = true;
+          } else if (item.id === 'blast_powder') {
+            for (const h of this.humanHeroes) h.blastPowder = true;
           }
 
           hero.celebrateTimer = 1.0;
@@ -1511,10 +1558,46 @@
         }
       }
 
+      // Talking Villagers, Innkeepers & Arena Master!
+      if (tile === T.NPC_VILLAGER) {
+        const npc = this.room.npcs?.find((n) => n.col === col && n.row === row);
+        if (npc?.arenaMode && this.interactArenaNpc) {
+          return this.interactArenaNpc(npc, hero);
+        }
+        if (npc?.heals) {
+          for (const h of this.humanHeroes) h.hp = h.maxHp;
+          FB.audio.play('fairy');
+          this.spawnParticles(hero.x, hero.y, '#7dd3fc', 14, 65, { shape: 'star' });
+          this.addFloatingText(hero.x, hero.y - 10, 'RESTED!', '#7dd3fc');
+          FB.ui.renderHUD(this);
+        } else {
+          FB.audio.play('switch');
+        }
+        this.showDialog(
+          npc?.text ||
+            'VILLAGER: Welcome, traveler! Explore the woods, lakes, desert, and volcanic peaks beyond Sanctuary Haven!'
+        );
+        return true;
+      }
+
+      // Village Fountain full heal!
+      if (tile === T.FOUNTAIN) {
+        for (const h of this.humanHeroes) h.hp = h.maxHp;
+        FB.audio.play('fairy');
+        this.spawnParticles(col * TS + 8, row * TS + 8, '#7dd3fc', 16, 70, { shape: 'star' });
+        this.addFloatingText(hero.x, hero.y - 10, 'FULL HEAL!', '#7dd3fc');
+        this.showToast('The crystal fountain restored all heroes to full hearts!', 2.4);
+        FB.ui.renderHUD(this);
+        return true;
+      }
+
       // Merchant greeting
       if (tile === T.MERCHANT || tile === T.SHOP_COUNTER) {
         FB.audio.play('switch');
-        this.showDialog('SANCTUARY MERCHANT: Welcome, Heroes! Walk up to any pedestal and press Attack or F to purchase upgrades with your Rupees!');
+        this.showDialog(
+          this.room.merchantText ||
+            'SANCTUARY MERCHANT: Welcome, Heroes! Walk up to any pedestal and press Attack or F to purchase upgrades with your Rupees!'
+        );
         return true;
       }
 
@@ -1999,20 +2082,29 @@
         tile === T.SHOP_FLOOR ||
         tile === T.DARK_GRASS ||
         tile === T.DARK_PATH ||
-        tile === T.ICE_FLOOR
+        tile === T.ICE_FLOOR ||
+        tile === T.TOWN_COBBLE ||
+        tile === T.DOCK_WOOD ||
+        tile === T.SAND ||
+        tile === T.SAND_PATH ||
+        tile === T.MOUNTAIN_GROUND
       ) {
         hero.safeX = col * TS + 8;
         hero.safeY = row * TS + 8;
       }
 
-      // Portals (Overworld <-> Palace / Shop / Dark World / Frost Spire)
+      // Portals (Overworld <-> Palace / Shop / Houses / Dark World / Frost / Desert / Magma / Arena)
       if (
         (tile === T.PORTAL_DUNGEON ||
           tile === T.PORTAL_OVERWORLD ||
           tile === T.PORTAL_SHOP ||
           tile === T.SHOP_EXIT ||
           tile === T.PORTAL_DARK ||
-          tile === T.PORTAL_FROST) &&
+          tile === T.PORTAL_FROST ||
+          tile === T.PORTAL_HOUSE ||
+          tile === T.PORTAL_DESERT ||
+          tile === T.PORTAL_MAGMA ||
+          tile === T.PORTAL_ARENA) &&
         this.room.portals
       ) {
         const portal = this.room.portals.find((p) => p.col === col && p.row === row);
@@ -2036,8 +2128,8 @@
         hero.damage(1, col * TS + 8, row * TS + 8, this);
       }
 
-      // Fairy Pool healing
-      if (tile === T.FAIRY_POOL) {
+      // Fairy Pool & Mountain Hot Spring healing
+      if (tile === T.FAIRY_POOL || tile === T.HOT_SPRING) {
         if (hero.hp < hero.maxHp) {
           hero.hp = hero.maxHp;
           FB.audio.play('fairy');
@@ -3236,13 +3328,15 @@
     }
 
     explodeBomb(bomb) {
-      const blastRadius = 32;
+      const hasBlast = !!bomb.owner?.blastPowder;
+      const blastRadius = hasBlast ? 48 : 32;
       const heroBlastRadius = 24;
+      const bombDmg = (bomb.damage || 5) + (hasBlast ? 3 : 0);
       FB.audio.play('bombBoom');
-      this.screenShake = 6;
-      this.spawnRing(bomb.x, bomb.y, '#fde047', 34, 0.28);
-      this.spawnRing(bomb.x, bomb.y, '#fb923c', 26, 0.22);
-      this.spawnParticles(bomb.x, bomb.y, '#fb923c', 16, 95, { shape: 'spark' });
+      this.screenShake = hasBlast ? 8 : 6;
+      this.spawnRing(bomb.x, bomb.y, '#fde047', hasBlast ? 48 : 34, 0.3);
+      this.spawnRing(bomb.x, bomb.y, '#fb923c', hasBlast ? 36 : 26, 0.24);
+      this.spawnParticles(bomb.x, bomb.y, '#fb923c', hasBlast ? 22 : 16, 95, { shape: 'spark' });
       this.spawnParticles(bomb.x, bomb.y, '#fde047', 12, 70, { shape: 'star' });
       this.spawnParticles(bomb.x, bomb.y, '#e2e8f0', 10, 50, { shape: 'dust', size: 3.2, life: 0.38 });
 
@@ -3296,7 +3390,7 @@
       for (const e of this.enemies) {
         if (!e.alive) continue;
         if (Math.hypot(e.x - bomb.x, e.y - bomb.y) < blastRadius + e.w * 0.5) {
-          e.hit(bomb.damage, bomb.x, bomb.y, bomb.owner, this, { isBomb: true, ignoreOrbs: true });
+          e.hit(bombDmg, bomb.x, bomb.y, bomb.owner, this, { isBomb: true, ignoreOrbs: true });
         }
       }
 
@@ -3533,7 +3627,7 @@
       if (!room) return;
       const area = room.area || 'overworld';
 
-      if (area === 'overworld') {
+      if (area === 'overworld' || area === 'village') {
         // Sunlit pollen motes + fluttering colorful pixel butterflies!
         for (let i = 0; i < 14; i++) {
           this.ambientMotes.push({
@@ -3543,7 +3637,7 @@
             vy: -4 + Math.random() * 8,
             size: Math.random() < 0.4 ? 3 : 2,
             phase: Math.random() * Math.PI * 2,
-            color: Math.random() < 0.5 ? '#fef08a' : '#dcfce7',
+            color: area === 'village' ? '#fef9c3' : Math.random() < 0.5 ? '#fef08a' : '#dcfce7',
           });
         }
         const bfColors = [
@@ -3559,6 +3653,34 @@
             turnTimer: 0.8 + Math.random() * 1.4,
             phase: Math.random() * Math.PI * 2,
             colors: bfColors[i % bfColors.length],
+          });
+        }
+      } else if (area === 'desert' || area === 'desert_dungeon') {
+        // Wind-blown golden desert sand wisps!
+        const count = area === 'desert' ? 24 : 16;
+        for (let i = 0; i < count; i++) {
+          this.ambientMotes.push({
+            x: Math.random() * FB.RENDER_W,
+            y: Math.random() * FB.RENDER_H,
+            vx: 24 + Math.random() * 22,
+            vy: 3 + Math.random() * 6,
+            size: Math.random() < 0.4 ? 3 : 2,
+            phase: Math.random() * Math.PI * 2,
+            color: Math.random() < 0.5 ? '#fde68a' : '#f59e0b',
+          });
+        }
+      } else if (area === 'mountain' || area === 'magma') {
+        // Rising volcanic ember sparks & ash!
+        const count = area === 'magma' ? 28 : 20;
+        for (let i = 0; i < count; i++) {
+          this.ambientMotes.push({
+            x: Math.random() * FB.RENDER_W,
+            y: Math.random() * FB.RENDER_H,
+            vx: -6 + Math.random() * 14,
+            vy: -16 - Math.random() * 18,
+            size: Math.random() < 0.35 ? 3 : 2,
+            phase: Math.random() * Math.PI * 2,
+            color: Math.random() < 0.55 ? '#fb923c' : '#fde047',
           });
         }
       } else if (area === 'frost') {

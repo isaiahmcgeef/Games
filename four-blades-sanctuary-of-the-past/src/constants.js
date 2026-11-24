@@ -91,6 +91,25 @@
     PORTAL_DARK: 54,
     PORTAL_FROST: 55,
     ICE_FLOOR: 56,
+    TOWN_COBBLE: 57,
+    HOUSE_WALL: 58,
+    HOUSE_ROOF: 59,
+    PORTAL_HOUSE: 60,
+    NPC_VILLAGER: 61,
+    FOUNTAIN: 62,
+    HOT_SPRING: 63,
+    WATERFALL: 64,
+    DOCK_WOOD: 65,
+    SAND: 66,
+    SAND_PATH: 67,
+    CACTUS: 68,
+    DESERT_RUIN: 69,
+    PORTAL_DESERT: 70,
+    MOUNTAIN_GROUND: 71,
+    MOUNTAIN_ROCK: 72,
+    LAVA: 73,
+    PORTAL_MAGMA: 74,
+    PORTAL_ARENA: 75,
   };
 
   FB.SHOP_CATALOG = [
@@ -126,6 +145,54 @@
       color: '#fb923c',
       desc: '+1 Sword Damage and fires golden Sword Beams on Hit 3 at full health!',
     },
+    {
+      id: 'golden_blade',
+      name: 'Golden Master Blade',
+      short: 'GOLD',
+      cost: 110,
+      color: '#fde047',
+      desc: 'Haven Blacksmith forge! +2 Sword Damage and blazing Golden Sword Beams at full hearts!',
+    },
+    {
+      id: 'pegasus_oil',
+      name: 'Pegasus Oil',
+      short: 'DASH',
+      cost: 65,
+      color: '#38bdf8',
+      desc: 'Haven Blacksmith tonic! Cuts Dash cooldown by 45% and extends dash distance!',
+    },
+    {
+      id: 'grip_sandals',
+      name: 'Grip Sandals',
+      short: 'GRIP',
+      cost: 55,
+      color: '#d97706',
+      desc: 'Oasis Bazaar gear! Eliminates icy floor sliding and boosts walking speed by 12%!',
+    },
+    {
+      id: 'blue_elixir',
+      name: 'Blue Elixir',
+      short: 'ELIXIR',
+      cost: 75,
+      color: '#0ea5e9',
+      desc: 'Oasis Apothecary brew! Auto-revives with full hearts and 2.2s invulnerability!',
+    },
+    {
+      id: 'hero_mail',
+      name: "Hero's Mail Armor",
+      short: 'MAIL',
+      cost: 120,
+      color: '#a855f7',
+      desc: 'Emberwatch Highland forge! Reduces all incoming enemy damage by 1 heart unit!',
+    },
+    {
+      id: 'blast_powder',
+      name: 'Blast Powder',
+      short: 'BLAST',
+      cost: 70,
+      color: '#f97316',
+      desc: 'Emberwatch Highland blend! +50% Bomb blast radius and +3 Bomb damage!',
+    },
   ];
 
   FB.SOLID_TILES = new Set([
@@ -159,9 +226,18 @@
     FB.TILES.POST_LATCH,
     FB.TILES.DARK_TREE,
     FB.TILES.DARK_WATER,
+    FB.TILES.HOUSE_WALL,
+    FB.TILES.HOUSE_ROOF,
+    FB.TILES.NPC_VILLAGER,
+    FB.TILES.FOUNTAIN,
+    FB.TILES.WATERFALL,
+    FB.TILES.CACTUS,
+    FB.TILES.DESERT_RUIN,
+    FB.TILES.MOUNTAIN_ROCK,
+    FB.TILES.LAVA,
   ]);
 
-  // Projectiles can fly over water, pits, bushes, low obstacles
+  // Projectiles can fly over water, lava, pits, bushes, low obstacles
   FB.PROJECTILE_BLOCK_TILES = new Set([
     FB.TILES.TREE,
     FB.TILES.DARK_TREE,
@@ -173,6 +249,11 @@
     FB.TILES.DOOR_BARRED,
     FB.TILES.CRACKED_WALL,
     FB.TILES.STATUE,
+    FB.TILES.HOUSE_WALL,
+    FB.TILES.HOUSE_ROOF,
+    FB.TILES.DESERT_RUIN,
+    FB.TILES.MOUNTAIN_ROCK,
+    FB.TILES.WATERFALL,
   ]);
 
   FB.ITEMS = {
