@@ -275,7 +275,7 @@
       this.pickups.push(new FB.Pickup(kind, x, y, extra));
     }
 
-    spawnParticles(x, y, color, count = 6, speed = 55) {
+    spawnParticles(x, y, color, count = 6, speed = 55, opts = {}) {
       for (let i = 0; i < count; i++) {
         const a = Math.random() * Math.PI * 2;
         const s = (0.35 + Math.random() * 0.85) * speed;
@@ -284,13 +284,23 @@
             x,
             y,
             Math.cos(a) * s,
-            Math.sin(a) * s,
+            Math.sin(a) * s - (opts.gravity ? 22 : 0),
             color,
-            0.25 + Math.random() * 0.25,
-            1.5 + Math.random() * 1.5
+            (opts.life || 0.26) + Math.random() * 0.24,
+            (opts.size || 1.6) + Math.random() * 1.4,
+            opts
           )
         );
       }
+    }
+
+    spawnRing(x, y, color, maxRadius = 26, life = 0.28) {
+      this.particles.push(
+        new FB.Particle(x, y, 0, 0, color, life, 2, {
+          shape: 'ring',
+          maxRadius,
+        })
+      );
     }
 
     addFloatingText(x, y, text, color = '#fde047') {
@@ -399,6 +409,14 @@
       if (hero.dashTimer > 0) hero.dashTimer -= dt;
       if (hero.dashCooldown > 0) hero.dashCooldown -= dt;
       if (hero.itemCooldown > 0) hero.itemCooldown -= dt;
+      if (hero.itemAnimTimer > 0) hero.itemAnimTimer -= dt;
+      if (hero.celebrateTimer > 0) hero.celebrateTimer -= dt;
+
+      // Decay Pegasus Roll afterimages
+      if (hero.afterimages && hero.afterimages.length > 0) {
+        for (const g of hero.afterimages) g.life -= dt;
+        hero.afterimages = hero.afterimages.filter((g) => g.life > 0);
+      }
 
       if (hero.downed) return;
 
@@ -432,8 +450,9 @@
         hero.dashDy = ddy / len;
         hero.dashTimer = FB.CONFIG.DASH_DURATION;
         hero.dashCooldown = FB.CONFIG.DASH_COOLDOWN;
+        hero.dashDustTick = 0;
         FB.audio.play('dash');
-        this.spawnParticles(hero.x, hero.y + 4, '#e2e8f0', 5, 35);
+        this.spawnParticles(hero.x, hero.y + 4, '#e2e8f0', 6, 38, { shape: 'dust' });
       }
 
       // Sword attack + Charge Spin Attack
@@ -451,7 +470,8 @@
         if (hero.spinCharge >= FB.CONFIG.SPIN_CHARGE_TIME && !hero.spinReadyNotified) {
           hero.spinReadyNotified = true;
           FB.audio.play('charge');
-          this.spawnParticles(hero.x, hero.y, '#fde047', 6, 40);
+          this.spawnParticles(hero.x, hero.y, '#fde047', 7, 45, { shape: 'star' });
+          this.spawnRing(hero.x, hero.y, '#fde047', 18, 0.22);
         }
       } else {
         if (hero.spinCharge >= FB.CONFIG.SPIN_CHARGE_TIME) {
@@ -476,6 +496,12 @@
       } else if (hero.dashTimer > 0) {
         vx = hero.dashDx * FB.CONFIG.DASH_SPEED;
         vy = hero.dashDy * FB.CONFIG.DASH_SPEED;
+        hero.dashDustTick += dt;
+        if (hero.dashDustTick >= 0.032) {
+          hero.dashDustTick = 0;
+          hero.afterimages.push({ x: hero.x, y: hero.y, life: 0.14, maxLife: 0.14 });
+          this.spawnParticles(hero.x, hero.y + 4, '#e2e8f0', 1, 20, { shape: 'dust', life: 0.2 });
+        }
       } else {
         const speedMult = hero.spinCharge > 0.15 ? 0.65 : hero.swordTimer > 0 ? 0.5 : 1.0;
         vx = inp.dx * FB.CONFIG.PLAYER_SPEED * speedMult;
@@ -490,7 +516,16 @@
       }
 
       hero.moving = Math.hypot(vx, vy) > 4;
+      if (hero.moving && hero.dashTimer <= 0) {
+        hero.walkPhase += dt * 11.5;
+      } else if (!hero.moving) {
+        hero.walkPhase = 0;
+      }
+      hero.pushing = false;
       this.moveHeroWithCollision(hero, vx * dt, vy * dt, dt);
+      if (hero.pushTimer > 0.04) {
+        hero.pushing = true;
+      }
 
       // Active sword / spin hitboxes
       if (hero.swordTimer > 0) {
@@ -509,14 +544,16 @@
         this.spiritClone = new FB.Hero(2, p1.x - 14, p1.y, true);
         this.spiritClone.showTag = true;
         FB.audio.play('fairy');
-        this.spawnParticles(this.spiritClone.x, this.spiritClone.y, '#67e8f9', 10);
+        this.spawnParticles(this.spiritClone.x, this.spiritClone.y, '#67e8f9', 10, 55, { shape: 'star' });
+        this.spawnRing(this.spiritClone.x, this.spiritClone.y, '#67e8f9', 18, 0.26);
         this.showToast('Spirit Clone summoned! Press Q to anchor it on switches, Q again to dismiss.', 2.8);
       } else if (!this.spiritClone.cloneHold) {
         this.spiritClone.cloneHold = true;
         FB.audio.play('switch');
+        this.spawnRing(this.spiritClone.x, this.spiritClone.y + 4, '#67e8f9', 16, 0.25);
         this.addFloatingText(this.spiritClone.x, this.spiritClone.y - 10, 'HOLD', '#67e8f9');
       } else {
-        this.spawnParticles(this.spiritClone.x, this.spiritClone.y, '#67e8f9', 8);
+        this.spawnParticles(this.spiritClone.x, this.spiritClone.y, '#67e8f9', 8, 45, { shape: 'star' });
         this.spiritClone = null;
         FB.audio.play('dash');
       }
@@ -543,6 +580,7 @@
           const vx = (dx / dist) * spd;
           const vy = (dy / dist) * spd;
           clone.moving = true;
+          clone.walkPhase += dt * 11.5;
           clone.dir = leader.dir;
           this.moveHeroWithCollision(clone, vx * dt, vy * dt, dt);
         } else {
@@ -584,7 +622,8 @@
             fallen.reviveProgress = 0;
             rescuer.revives += 1;
             FB.audio.play('revive');
-            this.spawnParticles(fallen.x, fallen.y, '#fde047', 12);
+            this.spawnParticles(fallen.x, fallen.y, '#fde047', 12, 65, { shape: 'star' });
+            this.spawnRing(fallen.x, fallen.y, '#4ade80', 22, 0.3);
             this.addFloatingText(fallen.x, fallen.y - 10, 'REVIVED!', '#4ade80');
           }
         } else {
@@ -605,7 +644,8 @@
       hero.swordCooldown = 0.36;
       hero.swordHitSet = new Set();
       FB.audio.play('spin');
-      this.spawnParticles(hero.x, hero.y, '#fde047', 10, 75);
+      this.spawnParticles(hero.x, hero.y, '#fde047', 10, 75, { shape: 'star' });
+      this.spawnRing(hero.x, hero.y, '#fde047', 26, 0.3);
     }
 
     tryInteract(hero) {
@@ -640,7 +680,8 @@
       this.room.grid[row][col] = isBig ? T.BIG_CHEST_OPEN : T.CHEST_OPEN;
       this.room.openedChests.add(`${col},${row}`);
       FB.audio.play('chest');
-      this.spawnParticles(col * TS + 8, row * TS + 8, '#fde047', 16, 70);
+      this.spawnParticles(col * TS + 8, row * TS + 8, '#fde047', 16, 70, { shape: 'star' });
+      this.spawnRing(col * TS + 8, row * TS + 8, '#fde047', 26, 0.35);
 
       let spec = null;
       if (this.room.chests) {
@@ -654,21 +695,31 @@
       }
 
       const reward = spec ? spec.reward : 'rupee_50';
+      let rewardColor = '#fde047';
       if (reward === 'small_key') {
         this.smallKeys += 1;
       } else if (reward === 'boss_key') {
         this.hasBossKey = true;
+        rewardColor = '#f59e0b';
       } else if (reward === 'heart_container') {
+        rewardColor = '#ef4444';
         for (const h of this.humanHeroes) {
           h.maxHp += 2;
           h.hp = h.maxHp;
         }
       } else if (reward === 'rupee_50') {
+        rewardColor = '#a855f7';
         hero.rupees += 50;
         for (const h of this.humanHeroes) h.heal(6);
       } else if (reward === 'rupee_100') {
+        rewardColor = '#fde047';
         hero.rupees += 100;
         for (const h of this.humanHeroes) h.hp = h.maxHp;
+      }
+
+      if (hero) {
+        hero.celebrateTimer = 1.1;
+        hero.celebrateColor = rewardColor;
       }
 
       this.showDialog(spec ? spec.label : 'Found a Treasure Chest! +50 Rupees!');
@@ -694,6 +745,8 @@
         });
         hero.activeBoomerang = proj;
         hero.itemCooldown = 0.25;
+        hero.itemAnimTimer = 0.18;
+        hero.lastItemUsed = item;
         this.projectiles.push(proj);
         FB.audio.play('boomerang');
       } else if (item === FB.ITEMS.BOMB) {
@@ -709,6 +762,8 @@
           radius: 7,
         });
         hero.itemCooldown = 0.55;
+        hero.itemAnimTimer = 0.18;
+        hero.lastItemUsed = item;
         this.projectiles.push(proj);
         FB.audio.play('bombPlace');
       } else if (item === FB.ITEMS.BOW) {
@@ -724,6 +779,8 @@
           radius: 4,
         });
         hero.itemCooldown = 0.34;
+        hero.itemAnimTimer = 0.22;
+        hero.lastItemUsed = item;
         this.projectiles.push(proj);
         FB.audio.play('arrow');
       } else if (item === FB.ITEMS.FIREROD) {
@@ -739,6 +796,8 @@
           radius: 6,
         });
         hero.itemCooldown = 0.4;
+        hero.itemAnimTimer = 0.24;
+        hero.lastItemUsed = item;
         this.projectiles.push(proj);
         FB.audio.play('fire');
       }
@@ -991,12 +1050,14 @@
           if (tile === T.BUSH) {
             this.room.grid[r][c] = T.GRASS;
             FB.audio.play('bush');
-            this.spawnParticles(tx, ty, '#4ade80', 8, 55);
+            this.spawnParticles(tx, ty, '#4ade80', 7, 52, { shape: 'leaf', gravity: 55, life: 0.42 });
+            this.spawnParticles(tx, ty, '#16a34a', 4, 42, { shape: 'leaf', gravity: 50, life: 0.4 });
             this._dropDestructibleLoot(tx, ty, false);
           } else if (tile === T.POT) {
             this.room.grid[r][c] = this.room.area === 'dungeon' ? T.DUNGEON_FLOOR : T.GRASS;
             FB.audio.play('pot');
-            this.spawnParticles(tx, ty, '#d49461', 8, 60);
+            this.spawnParticles(tx, ty, '#d49461', 7, 68, { shape: 'spark', gravity: 140, life: 0.36 });
+            this.spawnParticles(tx, ty, '#8c4f23', 5, 55, { shape: 'square', gravity: 130, life: 0.32 });
             this._dropDestructibleLoot(tx, ty, !!this.room.fairyPots);
           } else if (tile === T.CRYSTAL_BLUE || tile === T.CRYSTAL_RED) {
             const cKey = `crystal_${c}_${r}`;
@@ -1108,6 +1169,7 @@
           e.stunTimer -= dt;
           continue;
         }
+        e.walkPhase += dt * (e.type === 'red_soldier' ? 9.5 : 7.5);
 
         // Nearest hero target
         let target = liveHeroes[0];
@@ -1337,6 +1399,9 @@
         p.angle += dt * 16;
 
         if (p.kind === 'bomb') {
+          if (Math.random() < (p.life < 0.45 ? 0.55 : 0.25)) {
+            this.spawnParticles(p.x + 1, p.y - 6, '#fde047', 1, 32, { shape: 'spark', life: 0.16 });
+          }
           if (p.life <= 0) {
             this.explodeBomb(p);
             p.alive = false;
@@ -1372,6 +1437,11 @@
         } else {
           p.x += p.vx * dt;
           p.y += p.vy * dt;
+          if (p.kind === 'fireball' && Math.random() < 0.5) {
+            this.spawnParticles(p.x, p.y, '#fb923c', 1, 18, { shape: 'dust', life: 0.18, size: 2.2 });
+          } else if (p.kind === 'dark_orb' && Math.random() < 0.35) {
+            this.spawnParticles(p.x, p.y, '#a855f7', 1, 15, { shape: 'dust', life: 0.16, size: 1.8 });
+          }
           if (p.life <= 0) {
             p.alive = false;
             continue;
@@ -1468,9 +1538,11 @@
       const blastRadius = 32;
       FB.audio.play('bombBoom');
       this.screenShake = 6;
-      this.spawnParticles(bomb.x, bomb.y, '#fb923c', 16, 95);
-      this.spawnParticles(bomb.x, bomb.y, '#fde047', 12, 70);
-      this.spawnParticles(bomb.x, bomb.y, '#e2e8f0', 10, 50);
+      this.spawnRing(bomb.x, bomb.y, '#fde047', 34, 0.28);
+      this.spawnRing(bomb.x, bomb.y, '#fb923c', 26, 0.22);
+      this.spawnParticles(bomb.x, bomb.y, '#fb923c', 16, 95, { shape: 'spark' });
+      this.spawnParticles(bomb.x, bomb.y, '#fde047', 12, 70, { shape: 'star' });
+      this.spawnParticles(bomb.x, bomb.y, '#e2e8f0', 10, 50, { shape: 'dust', size: 3.2, life: 0.38 });
 
       // Blast cracked walls, cracked boulders, bushes, pots, crystal switches!
       const minC = Math.max(0, Math.floor((bomb.x - blastRadius) / TS));
@@ -1563,6 +1635,7 @@
         case 'fairy':
           for (const h of this.humanHeroes) h.heal(h.maxHp);
           FB.audio.play('fairy');
+          this.spawnParticles(item.x, item.y, '#f472b6', 10, 55, { shape: 'star' });
           this.addFloatingText(item.x, item.y - 8, 'FULL HEAL!', '#f472b6');
           break;
         case 'heart_container':
@@ -1570,7 +1643,11 @@
             h.maxHp += 2;
             h.hp = h.maxHp;
           }
+          hero.celebrateTimer = 1.1;
+          hero.celebrateColor = '#ef4444';
           FB.audio.play('chest');
+          this.spawnParticles(item.x, item.y, '#ef4444', 12, 65, { shape: 'star' });
+          this.spawnRing(item.x, item.y, '#fde047', 24, 0.35);
           this.showToast('Heart Container claimed! All heroes gain +1 Max Heart!', 3.2);
           break;
         case 'key':
@@ -1584,11 +1661,14 @@
           for (const h of this.humanHeroes) {
             h.grantItem(item.itemId);
           }
+          hero.celebrateTimer = 1.2;
+          hero.celebrateColor = meta?.color || '#fde047';
           const col = Math.floor(item.x / TS);
           const row = Math.floor(item.y / TS);
           this.room.claimedPedestals.add(`${col},${row}`);
           FB.audio.play('chest');
-          this.spawnParticles(item.x, item.y, meta?.color || '#fde047', 14);
+          this.spawnParticles(item.x, item.y, meta?.color || '#fde047', 14, 65, { shape: 'star' });
+          this.spawnRing(item.x, item.y, '#fde047', 26, 0.35);
           this.showDialog(
             `Obtained ${meta.name}! ${meta.desc} (Press Item button to use, Cycle button to switch items.)`
           );
@@ -1651,12 +1731,14 @@
         if (puz.spawnChest) {
           const ch = puz.spawnChest;
           this.room.grid[ch.row][ch.col] = T.CHEST_CLOSED;
-          this.spawnParticles(ch.col * TS + 8, ch.row * TS + 8, '#fde047', 16);
+          this.spawnParticles(ch.col * TS + 8, ch.row * TS + 8, '#fde047', 16, 65, { shape: 'star' });
+          this.spawnRing(ch.col * TS + 8, ch.row * TS + 8, '#fde047', 24, 0.35);
         }
         if (puz.spawnBigChest) {
           const ch = puz.spawnBigChest;
           this.room.grid[ch.row][ch.col] = T.BIG_CHEST_CLOSED;
-          this.spawnParticles(ch.col * TS + 8, ch.row * TS + 8, '#fde047', 22);
+          this.spawnParticles(ch.col * TS + 8, ch.row * TS + 8, '#fde047', 22, 75, { shape: 'star' });
+          this.spawnRing(ch.col * TS + 8, ch.row * TS + 8, '#fde047', 30, 0.4);
         }
         this.showToast('Puzzle Solved! A path and treasure have been revealed!', 3.2);
       }
@@ -1666,8 +1748,13 @@
       for (const p of this.particles) {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
+        if (p.gravity) {
+          p.vy += p.gravity * dt;
+        } else {
+          p.vy *= 0.92;
+        }
         p.vx *= 0.92;
-        p.vy *= 0.92;
+        p.rotation += p.vrot * dt;
         p.life -= dt;
       }
       this.particles = this.particles.filter((p) => p.life > 0);
@@ -1723,11 +1810,48 @@
         this.renderProjectile(ctx, p);
       }
 
-      // 5. Render Particles & Floating Text
+      // 5. Render Rich Shaped Particles & Floating Text
       for (const pt of this.particles) {
-        ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
-        ctx.fillStyle = pt.color;
-        ctx.fillRect(Math.round(pt.x - pt.size / 2), Math.round(pt.y - pt.size / 2), pt.size, pt.size);
+        const ratio = Math.max(0, pt.life / pt.maxLife);
+        ctx.save();
+        ctx.globalAlpha = ratio;
+        if (pt.shape === 'ring') {
+          const rad = (1 - ratio) * pt.maxRadius + 3;
+          ctx.strokeStyle = pt.color;
+          ctx.lineWidth = Math.max(1, ratio * 2.5);
+          ctx.beginPath();
+          ctx.arc(Math.round(pt.x), Math.round(pt.y), rad, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (pt.shape === 'leaf') {
+          ctx.translate(Math.round(pt.x), Math.round(pt.y));
+          ctx.rotate(pt.rotation);
+          ctx.fillStyle = pt.color;
+          ctx.fillRect(-2, -1, 4, 2);
+          ctx.fillStyle = '#86efac';
+          ctx.fillRect(-1, -1, 2, 1);
+        } else if (pt.shape === 'star') {
+          const px = Math.round(pt.x);
+          const py = Math.round(pt.y);
+          ctx.fillStyle = pt.color;
+          ctx.fillRect(px - 2, py, 5, 1);
+          ctx.fillRect(px, py - 2, 1, 5);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(px, py, 1, 1);
+        } else if (pt.shape === 'dust') {
+          ctx.fillStyle = pt.color;
+          ctx.beginPath();
+          ctx.arc(Math.round(pt.x), Math.round(pt.y), pt.size * (0.6 + (1 - ratio) * 0.6), 0, Math.PI * 2);
+          ctx.fill();
+        } else if (pt.shape === 'spark') {
+          ctx.translate(Math.round(pt.x), Math.round(pt.y));
+          ctx.rotate(pt.rotation);
+          ctx.fillStyle = pt.color;
+          ctx.fillRect(-pt.size, -0.75, pt.size * 2, 1.5);
+        } else {
+          ctx.fillStyle = pt.color;
+          ctx.fillRect(Math.round(pt.x - pt.size / 2), Math.round(pt.y - pt.size / 2), pt.size, pt.size);
+        }
+        ctx.restore();
       }
       ctx.globalAlpha = 1;
 

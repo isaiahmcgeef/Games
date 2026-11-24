@@ -63,6 +63,16 @@
 
       // Solo Spirit Clone formation state
       this.cloneHold = false;
+
+      // Rich sprite animation state
+      this.walkPhase = 0;
+      this.itemAnimTimer = 0;
+      this.lastItemUsed = null;
+      this.celebrateTimer = 0;
+      this.celebrateColor = '#fde047';
+      this.pushing = false;
+      this.afterimages = [];
+      this.dashDustTick = 0;
     }
 
     get currentItem() {
@@ -139,6 +149,9 @@
       this.aiTimer = 0.5 + Math.random() * 1.2;
       this.shootTimer = 1.2 + Math.random() * 1.4;
       this.flying = false;
+      this.walkPhase = Math.random() * Math.PI * 2;
+      this.attackAnim = 0;
+      this.telegraphTimer = 0;
 
       const scale = 1 + (playerCount - 1) * 0.35;
 
@@ -320,7 +333,7 @@
   }
 
   class Particle {
-    constructor(x, y, vx, vy, color, life, size = 2) {
+    constructor(x, y, vx, vy, color, life, size = 2, opts = {}) {
       this.x = x;
       this.y = y;
       this.vx = vx;
@@ -329,6 +342,11 @@
       this.life = life;
       this.maxLife = life;
       this.size = size;
+      this.shape = opts.shape || 'square'; // 'square' | 'leaf' | 'spark' | 'ring' | 'star' | 'dust'
+      this.rotation = opts.rotation || Math.random() * Math.PI * 2;
+      this.vrot = opts.vrot || (Math.random() - 0.5) * 10;
+      this.gravity = opts.gravity || 0;
+      this.maxRadius = opts.maxRadius || 24;
     }
   }
 
