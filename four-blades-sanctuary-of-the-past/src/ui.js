@@ -47,6 +47,7 @@
         victoryStats: document.getElementById('victory-stats'),
         victoryTime: document.getElementById('victory-time'),
         btnStart: document.getElementById('btn-start'),
+        btnBossRush: document.getElementById('btn-boss-rush'),
         btnResume: document.getElementById('btn-resume'),
         btnRestartPause: document.getElementById('btn-restart-pause'),
         btnMenuPause: document.getElementById('btn-menu-pause'),
@@ -166,6 +167,12 @@
           if (game.state === 'playing') game.toggleMapDrawer();
         });
       }
+      if (this.els.btnBossRush) {
+        this.els.btnBossRush.addEventListener('click', () => {
+          FB.audio.init();
+          game.startBossRushMode(game.selectedPlayerCount);
+        });
+      }
 
       this.updateControlCards(1);
     }
@@ -178,6 +185,16 @@
         this.els.heroModeLabel.textContent = meta.heroModeUnlocked
           ? '★ Hero Mode Unlocked (2× Damage + Speedrun Timer)'
           : 'Hero Mode Preview (2× Damage + Speedrun Timer)';
+      }
+      if (this.els.btnBossRush) {
+        const unlocked = !!meta.bossRushUnlocked;
+        this.els.btnBossRush.classList.toggle('hidden', !unlocked);
+        if (unlocked && meta.bossRushBestTime !== null && meta.bossRushBestTime !== undefined) {
+          const bs = Math.floor(meta.bossRushBestTime);
+          this.els.btnBossRush.textContent = `★ BOSS RUSH (Best ${Math.floor(bs / 60)}:${String(bs % 60).padStart(2, '0')})`;
+        } else {
+          this.els.btnBossRush.textContent = '★ FOUR SOVEREIGNS BOSS RUSH';
+        }
       }
 
       let html = '';

@@ -585,6 +585,33 @@ body {
   background: #2d425e;
 }
 
+.title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn-boss-rush {
+  background: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 100%);
+  color: #fef08a;
+  border: 2px solid #facc15;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(185, 28, 28, 0.4);
+  transition: transform 0.12s ease, filter 0.15s ease;
+}
+
+.btn-boss-rush:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
 .stack-btns {
   display: flex;
   flex-direction: column;

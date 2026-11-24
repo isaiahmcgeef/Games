@@ -680,7 +680,48 @@ assert(FB.saves.getMeta().bossRushUnlocked === true, '4-Medallion Grand Victory 
 FB.saves.deleteSlot(2);
 console.log('[PASS] Phase 4 Expansion: Sunspire Temple (Solkar), Magma Citadel (Ignis Rex) & 4-Medallion Grand Victory');
 
-// 15. Visit & render every room in the world at Hi-Bit 640x416
+// 15. Phase 5 Expansion: Sanctuary Arena 5-Wave Gauntlet + Endgame-Unlocked Four Sovereigns Boss Rush
+FB.saves.saveMeta({ bossRushUnlocked: false, arenaBestWave: 0, bossRushBestTime: null });
+g.startNewGame(1, { slotIndex: 2, heroMode: false });
+assert(g.isBossRushUnlocked() === false, 'Boss Rush is locked before uniting all 4 Medallions');
+g.enterRoom('ow_arena', { col: 12, row: 11 });
+// Verify Boss Rush NPC refuses launch while locked
+const keeperNpc = g.room.npcs.find((n) => n.arenaMode === 'boss_rush');
+g.interactArenaNpc(keeperNpc, g.humanHeroes[0]);
+assert(!g.arenaState?.active, 'Boss Rush cannot start while locked');
+
+// Run full 5-Wave Sanctuary Arena Gauntlet
+const vexNpc = g.room.npcs.find((n) => n.arenaMode === 'gauntlet');
+g.interactArenaNpc(vexNpc, g.humanHeroes[0]);
+assert(g.arenaState?.active && g.arenaState.mode === 'gauntlet', 'Sanctuary Arena Gauntlet started');
+for (let w = 1; w <= 5; w++) {
+  g.updateArena(1.5); // finishes intermission & spawns wave w
+  assert(g.arenaState.wave === w && g.enemies.length >= 3, `Arena Wave ${w} spawned foes`);
+  for (const e of g.enemies) e.alive = false;
+  g.updateArena(0.05);
+}
+assert(!g.arenaState.active && FB.saves.getMeta().arenaBestWave === 5, 'Clearing all 5 Arena Waves saves arenaBestWave=5');
+assert(g.humanHeroes[0].rupees >= 150, 'Clearing Arena Gauntlet awards +150 Rupees');
+
+// Unlock Boss Rush via meta and run full 4-Sovereign Boss Rush (Vaalor -> Solkar -> Glacior -> Ignis Rex) in 2P Co-op!
+FB.saves.saveMeta({ bossRushUnlocked: true });
+assert(g.startBossRushMode(2) === true, 'Title Screen Boss Rush launches cleanly in 2P Co-op once unlocked');
+assert(g.room.id === 'ow_arena' && g.arenaState.mode === 'boss_rush', 'Boss Rush starts inside Sanctuary Arena');
+const expectedOrder = ['boss', 'desert_boss', 'frost_boss', 'magma_boss'];
+for (let i = 0; i < expectedOrder.length; i++) {
+  g.updateArena(2.0); // spawns Sovereign i
+  const b = g.enemies.find((e) => e.alive && e.type === expectedOrder[i]);
+  assert(!!b, `Boss Rush stage ${i + 1}/4 spawned ${expectedOrder[i]}`);
+  b.hurtTimer = 0;
+  b.hit(999, 100, 100, g.humanHeroes[0], g, { ignoreOrbs: true });
+}
+assert(!g.arenaState.active, 'Boss Rush finishes cleanly after defeating all 4 Sovereigns');
+assert(FB.saves.getMeta().bossRushBestTime !== null, 'Boss Rush records best clear time in meta');
+assert(g.humanHeroes[0].rupees >= 300, 'Boss Rush awards +300 Rupees');
+FB.saves.deleteSlot(2);
+console.log('[PASS] Phase 5 Expansion: Sanctuary Arena 5-Wave Gauntlet & Four Sovereigns Boss Rush');
+
+// 16. Visit & render every room in the world at Hi-Bit 640x416
 for (const id of Object.keys(g.rooms)) {
   const r = g.rooms[id];
   g.enterRoom(id, { col: Math.floor((r.cols || 20) / 2), row: Math.floor((r.rows || 13) / 2) });

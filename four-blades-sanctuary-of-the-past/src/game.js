@@ -68,6 +68,7 @@
       this.prevViewCtx = null;
       this.slowMoTimer = 0;
       this.mapOpen = false;
+      this.arenaState = null;
       this.roomCanvas = null;
       this.roomCtx = null;
       this.roomCacheKey = null;
@@ -487,6 +488,9 @@
       this.floatingTexts = [];
       this.enemies = [];
       this.roomCacheKey = null;
+      if (roomId !== 'ow_arena') {
+        this.arenaState = null;
+      }
 
       const rW = this.roomW;
       const rH = this.roomH;
@@ -870,11 +874,12 @@
         return;
       }
 
-      // Update Enemies, Projectiles, Pickups, Puzzles, Particles & Ambient Weather
+      // Update Enemies, Projectiles, Pickups, Puzzles, Arena, Particles & Ambient Weather
       this.updateEnemies(simDt);
       this.updateProjectiles(simDt);
       this.updatePickups(simDt);
       this.updatePuzzles();
+      this.updateArena(simDt);
       this.updateParticles(simDt);
       this.updateAtmosphere(simDt);
 
@@ -3245,6 +3250,241 @@
       FB.audio.stopMusic();
       FB.audio.play('victory');
       FB.ui.renderVictory(this);
+    }
+
+    isBossRushUnlocked() {
+      const meta = FB.saves ? FB.saves.getMeta() : {};
+      return (
+        !!meta.bossRushUnlocked ||
+        (this.bossDefeated && this.frostBossDefeated && this.desertBossDefeated && this.magmaBossDefeated)
+      );
+    }
+
+    interactArenaNpc(npc, hero) {
+      if (this.arenaState?.active) {
+        this.showToast('Arena Trial in progress — defeat all challengers!', 2.2);
+        return true;
+      }
+      if (npc.arenaMode === 'gauntlet') {
+        this.startArenaGauntlet();
+        return true;
+      }
+      if (npc.arenaMode === 'boss_rush') {
+        if (!this.isBossRushUnlocked()) {
+          FB.audio.play('clink');
+          this.showDialog(
+            'SOVEREIGN KEEPER: The Four Sovereigns Boss Rush is sealed! Unite all 4 Sovereign Medallions (Shadow, Solar, Frost, and Magma) to unlock this ultimate trial!'
+          );
+          return true;
+        }
+        this.startArenaBossRush();
+        return true;
+      }
+      return false;
+    }
+
+    startArenaGauntlet() {
+      this.enemies = [];
+      this.projectiles = [];
+      for (const h of this.humanHeroes) h.hp = h.maxHp;
+      this.arenaState = {
+        active: true,
+        mode: 'gauntlet',
+        wave: 0,
+        maxWaves: 5,
+        timer: 0,
+        intermission: 0.35,
+      };
+      FB.audio.playMusic('boss');
+      this.showToast('SANCTUARY ARENA: 5-Wave Gauntlet Begins! Defeat all foes!', 3.2);
+      FB.ui.renderHUD(this);
+    }
+
+    startArenaBossRush() {
+      this.enemies = [];
+      this.projectiles = [];
+      for (const h of this.humanHeroes) h.hp = h.maxHp;
+      this.arenaState = {
+        active: true,
+        mode: 'boss_rush',
+        stage: 0,
+        sequence: [
+          { type: 'boss', biome: 'dungeon', sub: 'BOSS RUSH 1/4 — SHADOW WRAITH', title: 'VAALOR' },
+          { type: 'desert_boss', biome: 'desert_dungeon', sub: 'BOSS RUSH 2/4 — SOLAR SENTINEL', title: 'SOLKAR' },
+          { type: 'frost_boss', biome: 'frost', sub: 'BOSS RUSH 3/4 — FROST SOVEREIGN', title: 'GLACIOR' },
+          { type: 'magma_boss', biome: 'magma', sub: 'BOSS RUSH 4/4 — FORGE TITAN', title: 'IGNIS REX' },
+        ],
+        timer: 0,
+        intermission: 0.4,
+      };
+      FB.audio.playMusic('boss');
+      this.showToast('FOUR SOVEREIGNS BOSS RUSH! Vaalor -> Solkar -> Glacior -> Ignis Rex!', 3.6);
+      FB.ui.renderHUD(this);
+    }
+
+    startBossRushMode(playerCount = 1) {
+      if (!this.isBossRushUnlocked()) {
+        this.showToast('Unite all 4 Sovereign Medallions to unlock Boss Rush!', 3.0);
+        return false;
+      }
+      this.startNewGame(playerCount, { slotIndex: this.activeSaveSlot, heroMode: this.heroMode });
+      for (const h of this.humanHeroes) {
+        h.maxHp = 16;
+        h.hp = 16;
+        h.items = [
+          FB.ITEMS.BOOMERANG,
+          FB.ITEMS.BOMB,
+          FB.ITEMS.BOW,
+          FB.ITEMS.FIREROD,
+          FB.ITEMS.HOOKSHOT,
+          FB.ITEMS.MIRROR,
+        ];
+        h.temperedSword = true;
+        h.mirrorShield = true;
+        h.potions = 1;
+      }
+      this.enterRoom('ow_arena', { col: 12, row: 11 });
+      this.startArenaBossRush();
+      return true;
+    }
+
+    _spawnArenaWave(waveNum) {
+      const waves = [
+        [
+          { type: 'octorok', col: 6, row: 6 },
+          { type: 'octorok', col: 18, row: 6 },
+          { type: 'chuchu', col: 12, row: 5 },
+        ],
+        [
+          { type: 'soldier', col: 6, row: 6 },
+          { type: 'red_soldier', col: 18, row: 6 },
+          { type: 'keese', col: 10, row: 4 },
+          { type: 'keese', col: 14, row: 4 },
+        ],
+        [
+          { type: 'stalfos', col: 7, row: 6 },
+          { type: 'stalfos', col: 17, row: 6 },
+          { type: 'wizzrobe', col: 12, row: 4 },
+        ],
+        [
+          { type: 'knight', col: 8, row: 6 },
+          { type: 'chuchu', col: 16, row: 6 },
+          { type: 'wizzrobe', col: 12, row: 4 },
+        ],
+        [
+          { type: 'knight', col: 7, row: 6 },
+          { type: 'knight', col: 17, row: 6 },
+          { type: 'wizzrobe', col: 10, row: 4 },
+          { type: 'wizzrobe', col: 14, row: 4 },
+        ],
+      ];
+      const spec = waves[waveNum - 1] || waves[0];
+      const pc = this.humanHeroes.length;
+      for (const s of spec) {
+        const sx = s.col * TS + 8;
+        const sy = s.row * TS + 8;
+        this.enemies.push(new FB.Enemy(s.type, sx, sy, pc, 'dungeon'));
+        this.spawnRing(sx, sy, '#facc15', 18, 0.28);
+      }
+      FB.audio.play('bossRoar');
+      this.showToast(`ARENA WAVE ${waveNum} / 5!`, 2.6);
+    }
+
+    updateArena(dt) {
+      const a = this.arenaState;
+      if (!a || !a.active || this.room?.id !== 'ow_arena') return;
+
+      a.timer += dt;
+      if (a.intermission > 0) {
+        a.intermission -= dt;
+        if (a.intermission <= 0) {
+          if (a.mode === 'gauntlet') {
+            a.wave += 1;
+            this._spawnArenaWave(a.wave);
+          } else if (a.mode === 'boss_rush') {
+            const spec = a.sequence[a.stage];
+            if (spec) {
+              const bx = Math.floor(this.roomCols / 2) * TS;
+              const by = 6 * TS + 8;
+              const boss = new FB.Enemy(spec.type, bx, by, this.humanHeroes.length, spec.biome);
+              this.enemies.push(boss);
+              this.spawnRing(bx, by, '#fde047', 36, 0.35);
+              FB.audio.play('bossRoar');
+              if (FB.ui.showBossIntro) FB.ui.showBossIntro(spec.sub, spec.title);
+              FB.ui.renderHUD(this);
+            }
+          }
+        }
+        return;
+      }
+
+      if (a.mode === 'gauntlet') {
+        const anyAlive = this.enemies.some((e) => e.alive);
+        if (!anyAlive) {
+          if (FB.saves) {
+            const meta = FB.saves.getMeta();
+            if (a.wave > (meta.arenaBestWave || 0)) {
+              FB.saves.saveMeta({ arenaBestWave: a.wave });
+            }
+          }
+          if (a.wave >= a.maxWaves) {
+            a.active = false;
+            for (const h of this.humanHeroes) {
+              h.hp = h.maxHp;
+              h.rupees += 150;
+              h.celebrateTimer = 1.2;
+              h.celebrateColor = '#fde047';
+            }
+            FB.audio.play('victory');
+            FB.audio.playMusic('dungeon');
+            this.saveProgress();
+            this.showDialog(
+              `ARENA CHAMPION! You conquered all 5 Waves of the Sanctuary Gauntlet in ${a.timer.toFixed(1)}s! Reward: +150 Rupees & Full Heal!`
+            );
+            FB.ui.renderHUD(this);
+          } else {
+            for (const h of this.humanHeroes) h.heal(4);
+            this.showToast(`Wave ${a.wave} Cleared! +2 Hearts — Prepare for Wave ${a.wave + 1}!`, 2.2);
+            a.intermission = 1.3;
+          }
+        }
+      }
+    }
+
+    onArenaBossDefeated(boss) {
+      const a = this.arenaState;
+      if (!a || !a.active || a.mode !== 'boss_rush') return;
+      a.stage += 1;
+      for (const h of this.humanHeroes) h.hp = h.maxHp;
+
+      if (a.stage >= a.sequence.length) {
+        a.active = false;
+        const clearSec = a.timer;
+        if (FB.saves) {
+          const meta = FB.saves.getMeta();
+          const prev = meta.bossRushBestTime;
+          const best = prev === null || prev === undefined ? clearSec : Math.min(prev, clearSec);
+          FB.saves.saveMeta({ bossRushBestTime: best, bossRushUnlocked: true });
+        }
+        for (const h of this.humanHeroes) {
+          h.rupees += 300;
+          h.celebrateTimer = 1.5;
+          h.celebrateColor = '#fde047';
+        }
+        FB.audio.play('victory');
+        FB.audio.playMusic('dungeon');
+        this.showDialog(
+          `FOUR SOVEREIGNS CONQUERED! You defeated Vaalor, Solkar, Glacior & Ignis Rex in ${clearSec.toFixed(1)}s! Reward: +300 Rupees!`
+        );
+        FB.ui.renderHUD(this);
+      } else {
+        this.showToast(
+          `Sovereign ${a.stage}/4 Defeated! Full Heal — Next Sovereign approaches!`,
+          2.6
+        );
+        a.intermission = 1.6;
+        FB.ui.renderHUD(this);
+      }
     }
 
     moveEnemy(e, dx, dy) {
