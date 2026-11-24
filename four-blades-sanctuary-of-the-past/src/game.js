@@ -584,6 +584,10 @@
       if (hero.itemAnimTimer > 0) hero.itemAnimTimer -= dt;
       if (hero.celebrateTimer > 0) hero.celebrateTimer -= dt;
       if (hero.parryFlash > 0) hero.parryFlash -= dt;
+      if (hero.streakTimer > 0) {
+        hero.streakTimer -= dt;
+        if (hero.streakTimer <= 0) hero.streakCount = 0;
+      }
       if (hero.comboTimer > 0) {
         hero.comboTimer -= dt;
         if (hero.comboTimer <= 0) {
@@ -599,9 +603,43 @@
 
       if (hero.downed) return;
 
+      // Being carried overhead by a teammate!
+      if (hero.carriedBy) {
+        hero.x = hero.carriedBy.x;
+        hero.y = hero.carriedBy.y - 12;
+        hero.moving = false;
+        return;
+      }
+
+      // Flying through the air after being tossed by a teammate (sails over pits/water!)
+      if (hero.thrownTimer > 0) {
+        hero.thrownTimer -= dt;
+        const nx = hero.x + hero.thrownVx * dt;
+        const ny = hero.y + hero.thrownVy * dt;
+        const blocked =
+          nx < TS ||
+          nx > FB.VIEW_W - TS ||
+          ny < TS ||
+          ny > FB.VIEW_H - TS ||
+          this.isSolidAt(Math.floor(nx / TS), Math.floor(ny / TS), true);
+        if (blocked) {
+          hero.thrownTimer = 0;
+          this.spawnParticles(hero.x, hero.y, '#e2e8f0', 6, 40, { shape: 'dust' });
+        } else {
+          hero.x = nx;
+          hero.y = ny;
+        }
+        return;
+      }
+
       // Solo Four Swords Spirit Clone toggle (Q / Tab)
       if (hero.index === 0 && this.humanHeroes.length === 1 && inp.clonePressed) {
         this.toggleSpiritClone();
+      }
+
+      // Dedicated Lift / Throw (or Shop Buy!)
+      if (inp.grabPressed) {
+        this.handleHeroGrabOrThrow(hero);
       }
 
       // Cycle sub-weapon
@@ -615,8 +653,8 @@
         FB.ui.renderHUD(this);
       }
 
-      // Dash / Pegasus Roll
-      if (inp.dashPressed && hero.dashCooldown <= 0 && hero.dashTimer <= 0) {
+      // Dash / Pegasus Roll (drops or blocks if carrying)
+      if (inp.dashPressed && !hero.carrying && hero.dashCooldown <= 0 && hero.dashTimer <= 0) {
         let ddx = inp.dx;
         let ddy = inp.dy;
         if (ddx === 0 && ddy === 0) {
@@ -634,17 +672,19 @@
         this.spawnParticles(hero.x, hero.y + 4, '#e2e8f0', 6, 38, { shape: 'dust' });
       }
 
-      // Sword attack + Charge Spin Attack
+      // Sword attack + Charge Spin Attack (if carrying, pressing attack throws!)
       if (inp.attackPressed && hero.swordCooldown <= 0 && hero.spinTimer <= 0) {
-        // First check if interacting with chest or signpost right in front
-        if (this.tryInteract(hero)) {
+        if (hero.carrying) {
+          this.handleHeroGrabOrThrow(hero);
+          hero.swordCooldown = 0.2;
+        } else if (this.tryInteract(hero)) {
           hero.swordCooldown = 0.22;
         } else {
           this.startSwordSwing(hero);
         }
       }
 
-      if (inp.attackDown && hero.spinTimer <= 0) {
+      if (inp.attackDown && !hero.carrying && hero.spinTimer <= 0) {
         hero.spinCharge += dt;
         if (hero.spinCharge >= FB.CONFIG.SPIN_CHARGE_TIME && !hero.spinReadyNotified) {
           hero.spinReadyNotified = true;
@@ -653,7 +693,7 @@
           this.spawnRing(hero.x, hero.y, '#fde047', 18, 0.22);
         }
       } else {
-        if (hero.spinCharge >= FB.CONFIG.SPIN_CHARGE_TIME) {
+        if (hero.spinCharge >= FB.CONFIG.SPIN_CHARGE_TIME && !hero.carrying) {
           this.startSpinAttack(hero);
         }
         hero.spinCharge = 0;
@@ -661,7 +701,7 @@
       }
 
       // Sub-Item use
-      if (inp.itemPressed && hero.itemCooldown <= 0 && hero.currentItem) {
+      if (inp.itemPressed && !hero.carrying && hero.itemCooldown <= 0 && hero.currentItem) {
         this.useHeroItem(hero);
       }
 
@@ -682,7 +722,8 @@
           this.spawnParticles(hero.x, hero.y + 4, '#e2e8f0', 1, 20, { shape: 'dust', life: 0.2 });
         }
       } else {
-        const speedMult = hero.spinCharge > 0.15 ? 0.65 : hero.swordTimer > 0 ? 0.5 : 1.0;
+        const carryMult = hero.carrying ? 0.82 : 1.0;
+        const speedMult = (hero.spinCharge > 0.15 ? 0.65 : hero.swordTimer > 0 ? 0.5 : 1.0) * carryMult;
         vx = inp.dx * FB.CONFIG.PLAYER_SPEED * speedMult;
         vy = inp.dy * FB.CONFIG.PLAYER_SPEED * speedMult;
         if (inp.dx !== 0 || inp.dy !== 0) {
@@ -704,6 +745,30 @@
       this.moveHeroWithCollision(hero, vx * dt, vy * dt, dt);
       if (hero.pushTimer > 0.04) {
         hero.pushing = true;
+      }
+
+      // Keep carried bomb or stunned enemy synced overhead!
+      if (hero.carrying) {
+        if (hero.carrying.kind === 'bomb') {
+          const b = hero.carrying.ref;
+          if (!b || !b.alive) {
+            hero.carrying = null;
+          } else {
+            b.x = hero.x;
+            b.y = hero.y - 12;
+            b.vx = 0;
+            b.vy = 0;
+          }
+        } else if (hero.carrying.kind === 'enemy') {
+          const e = hero.carrying.ref;
+          if (!e || !e.alive) {
+            hero.carrying = null;
+          } else {
+            e.x = hero.x;
+            e.y = hero.y - 12;
+            e.stunTimer = Math.max(e.stunTimer, 0.25);
+          }
+        }
       }
 
       // Active sword / spin hitboxes
@@ -830,6 +895,24 @@
       if (hero.comboStep === 2) {
         const dv = FB.DIR_VEC[hero.dir] || FB.DIR_VEC[0];
         this.spawnParticles(hero.x + dv.x * 16, hero.y + dv.y * 16, '#fde047', 6, 55, { shape: 'spark', life: 0.18 });
+
+        // Full-Health Master Sword Beam (with Tempered Blade upgrade!)
+        if (hero.temperedSword && hero.hp >= hero.maxHp && !hero.isClone) {
+          this.projectiles.push(
+            new FB.Projectile({
+              kind: 'beam',
+              x: hero.x + dv.x * 14,
+              y: hero.y + dv.y * 14,
+              vx: dv.x * 235,
+              vy: dv.y * 235,
+              owner: hero,
+              life: 0.95,
+              damage: 3,
+              radius: 6,
+            })
+          );
+          FB.audio.play('beam');
+        }
       }
     }
 
@@ -837,12 +920,256 @@
       hero.spinTimer = FB.CONFIG.SPIN_DURATION;
       hero.swordCooldown = 0.36;
       hero.swordHitSet = new Set();
+
+      // Check for Synced Four-Blade Hurricane Finisher with a nearby ally (or Spirit Clone!)
+      const partner = this.allHeroes.find(
+        (other) =>
+          other !== hero &&
+          !other.downed &&
+          Math.hypot(other.x - hero.x, other.y - hero.y) < 56 &&
+          (other.isClone || other.spinTimer > 0 || other.spinCharge > 0.2)
+      );
+
+      if (partner) {
+        this.triggerFourBladeHurricane(hero, partner);
+        return;
+      }
+
       FB.audio.play('spin');
       this.spawnParticles(hero.x, hero.y, '#fde047', 10, 75, { shape: 'star' });
       this.spawnRing(hero.x, hero.y, '#fde047', 26, 0.3);
     }
 
+    triggerFourBladeHurricane(hero, partner) {
+      const cx = (hero.x + partner.x) * 0.5;
+      const cy = (hero.y + partner.y) * 0.5;
+      const radius = 52;
+      partner.spinTimer = FB.CONFIG.SPIN_DURATION;
+
+      FB.audio.play('hurricane');
+      this.screenShake = Math.max(this.screenShake, 5);
+      this.hitstop = Math.max(this.hitstop, 0.055);
+      this.spawnRing(cx, cy, '#fde047', radius, 0.36);
+      this.spawnRing(cx, cy, '#4ade80', radius - 10, 0.3);
+      this.spawnParticles(cx, cy, '#fde047', 18, 105, { shape: 'star' });
+      this.spawnParticles(cx, cy, '#67e8f9', 14, 90, { shape: 'spark' });
+      this.addFloatingText(cx, cy - 14, 'FOUR-BLADE HURRICANE!', '#fde047');
+
+      // Clear enemy projectiles in hurricane radius
+      for (const p of this.projectiles) {
+        if (p.alive && p.fromEnemy && Math.hypot(p.x - cx, p.y - cy) < radius) {
+          p.alive = false;
+          this.spawnParticles(p.x, p.y, '#fef08a', 4, 45, { shape: 'spark' });
+        }
+      }
+
+      // Deal massive AoE damage to all enemies in range (pierces boss orbs!)
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Math.hypot(e.x - cx, e.y - cy) < radius + e.w * 0.5) {
+          e.hit(6, cx, cy, hero, this, { ignoreOrbs: true, stun: 0.9 });
+        }
+      }
+    }
+
+    handleHeroGrabOrThrow(hero) {
+      const dv = FB.DIR_VEC[hero.dir] || FB.DIR_VEC[0];
+
+      // 1. If already carrying something -> THROW IT!
+      if (hero.carrying) {
+        const carried = hero.carrying;
+        hero.carrying = null;
+        FB.audio.play('throw');
+
+        if (carried.kind === 'pot') {
+          this.projectiles.push(
+            new FB.Projectile({
+              kind: 'thrown_pot',
+              x: hero.x + dv.x * 8,
+              y: hero.y + dv.y * 8,
+              vx: dv.x * 195,
+              vy: dv.y * 195,
+              owner: hero,
+              life: 0.45,
+              damage: 4,
+              radius: 6,
+            })
+          );
+        } else if (carried.kind === 'bomb' && carried.ref && carried.ref.alive) {
+          const b = carried.ref;
+          b.x = hero.x + dv.x * 10;
+          b.y = hero.y + dv.y * 10;
+          b.vx = dv.x * 165;
+          b.vy = dv.y * 165;
+        } else if (carried.kind === 'enemy' && carried.ref && carried.ref.alive) {
+          const e = carried.ref;
+          this.projectiles.push(
+            new FB.Projectile({
+              kind: 'thrown_enemy',
+              x: hero.x + dv.x * 10,
+              y: hero.y + dv.y * 10,
+              vx: dv.x * 185,
+              vy: dv.y * 185,
+              owner: hero,
+              life: 0.42,
+              damage: 4,
+              radius: 8,
+              payload: e,
+            })
+          );
+        } else if (carried.kind === 'hero' && carried.ref) {
+          const ally = carried.ref;
+          ally.carriedBy = null;
+          ally.x = hero.x + dv.x * 10;
+          ally.y = hero.y + dv.y * 10;
+          ally.thrownTimer = 0.28;
+          ally.thrownVx = dv.x * 175;
+          ally.thrownVy = dv.y * 175;
+          ally.cloneHold = false;
+        }
+        return true;
+      }
+
+      // 2. Check Sanctuary Shop buy first if standing near shop pedestal
+      if (this.tryBuyShopItem(hero)) {
+        return true;
+      }
+
+      // 3. Lift live Bomb nearby
+      for (const p of this.projectiles) {
+        if (p.alive && p.kind === 'bomb' && Math.hypot(p.x - hero.x, p.y - hero.y) < 22) {
+          hero.carrying = { kind: 'bomb', ref: p };
+          FB.audio.play('lift');
+          return true;
+        }
+      }
+
+      // 4. Lift stunned non-boss Enemy nearby
+      for (const e of this.enemies) {
+        if (
+          e.alive &&
+          e.type !== 'boss' &&
+          e.type !== 'frost_boss' &&
+          e.stunTimer > 0 &&
+          Math.hypot(e.x - hero.x, e.y - hero.y) < 24
+        ) {
+          hero.carrying = { kind: 'enemy', ref: e };
+          FB.audio.play('lift');
+          this.addFloatingText(hero.x, hero.y - 12, 'LIFT!', '#fde047');
+          return true;
+        }
+      }
+
+      // 5. Lift adjacent Pot tile
+      const pc = Math.floor((hero.x + dv.x * 13) / TS);
+      const pr = Math.floor((hero.y + dv.y * 13) / TS);
+      if (pc >= 0 && pc < FB.ROOM_COLS && pr >= 0 && pr < FB.ROOM_ROWS) {
+        if (this.room.grid[pr][pc] === T.POT) {
+          this.room.grid[pr][pc] =
+            this.room.area === 'dungeon' || this.room.area === 'frost'
+              ? T.DUNGEON_FLOOR
+              : this.room.id === 'ow_shop'
+                ? T.SHOP_FLOOR
+                : T.GRASS;
+          hero.carrying = { kind: 'pot', ref: null };
+          FB.audio.play('lift');
+          return true;
+        }
+      }
+
+      // 6. Lift Teammate or Solo Spirit Clone!
+      for (const ally of this.allHeroes) {
+        if (
+          ally !== hero &&
+          !ally.downed &&
+          !ally.carriedBy &&
+          !ally.carrying &&
+          Math.hypot(ally.x - hero.x, ally.y - hero.y) < 20
+        ) {
+          hero.carrying = { kind: 'hero', ref: ally };
+          ally.carriedBy = hero;
+          FB.audio.play('lift');
+          this.addFloatingText(hero.x, hero.y - 14, 'TOSS READY!', '#67e8f9');
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    dropCarried(hero) {
+      if (!hero.carrying) return;
+      const c = hero.carrying;
+      hero.carrying = null;
+      if (c.kind === 'hero' && c.ref) {
+        c.ref.carriedBy = null;
+        c.ref.x = hero.x;
+        c.ref.y = hero.y;
+      } else if (c.kind === 'pot') {
+        FB.audio.play('pot');
+        this.spawnParticles(hero.x, hero.y, '#d49461', 6, 55, { shape: 'spark', gravity: 130 });
+      }
+    }
+
+    tryBuyShopItem(hero) {
+      if (!this.room || !this.room.shopItems) return false;
+      for (const slot of this.room.shopItems) {
+        const sx = slot.col * TS + 8;
+        const sy = slot.row * TS + 8;
+        if (Math.hypot(hero.x - sx, hero.y - sy) < 22) {
+          const item = FB.SHOP_CATALOG.find((c) => c.id === slot.catalogId);
+          if (!item) return false;
+
+          if (item.id === 'mirror_shield' && hero.mirrorShield) {
+            this.showToast('You already wield the Mirror Shield!', 2.0);
+            return true;
+          }
+          if (item.id === 'tempered_sword' && hero.temperedSword) {
+            this.showToast('Your blade is already Tempered!', 2.0);
+            return true;
+          }
+          if (item.id === 'heal' && hero.hp >= hero.maxHp) {
+            this.showToast('Your hearts are already full!', 1.8);
+            return true;
+          }
+          if (item.id === 'potion' && hero.potions >= 2) {
+            this.showToast('You can carry up to 2 Red Potions at once!', 2.0);
+            return true;
+          }
+          if (hero.rupees < item.cost) {
+            FB.audio.play('clink');
+            this.showToast(`Need ${item.cost} Rupees for ${item.name} (you have ${hero.rupees}).`, 2.4);
+            return true;
+          }
+
+          hero.rupees -= item.cost;
+          if (item.id === 'heal') {
+            hero.hp = hero.maxHp;
+          } else if (item.id === 'potion') {
+            hero.potions = (hero.potions || 0) + 1;
+          } else if (item.id === 'mirror_shield') {
+            for (const h of this.humanHeroes) h.mirrorShield = true;
+          } else if (item.id === 'tempered_sword') {
+            for (const h of this.humanHeroes) h.temperedSword = true;
+          }
+
+          hero.celebrateTimer = 1.0;
+          hero.celebrateColor = item.color;
+          FB.audio.play('buy');
+          this.spawnParticles(sx, sy, item.color, 14, 65, { shape: 'star' });
+          this.spawnRing(sx, sy, '#fde047', 22, 0.3);
+          this.showDialog(`Purchased ${item.name}! ${item.desc}`);
+          this.saveProgress();
+          FB.ui.renderHUD(this);
+          return true;
+        }
+      }
+      return false;
+    }
+
     tryInteract(hero) {
+      if (this.tryBuyShopItem(hero)) return true;
+
       const dv = FB.DIR_VEC[hero.dir];
       const fx = hero.x + dv.x * 13;
       const fy = hero.y + dv.y * 13;
@@ -859,6 +1186,13 @@
           this.showDialog(sign.text);
           return true;
         }
+      }
+
+      // Merchant greeting
+      if (tile === T.MERCHANT || tile === T.SHOP_COUNTER) {
+        FB.audio.play('switch');
+        this.showDialog('SANCTUARY MERCHANT: Welcome, Heroes! Walk up to any pedestal and press Attack or F to purchase upgrades with your Rupees!');
+        return true;
       }
 
       // Chests
@@ -1175,14 +1509,21 @@
         tile === T.PATH ||
         tile === T.DUNGEON_FLOOR ||
         tile === T.DUNGEON_CARPET ||
-        tile === T.BRIDGE
+        tile === T.BRIDGE ||
+        tile === T.SHOP_FLOOR
       ) {
         hero.safeX = col * TS + 8;
         hero.safeY = row * TS + 8;
       }
 
-      // Portals (Overworld <-> Palace)
-      if ((tile === T.PORTAL_DUNGEON || tile === T.PORTAL_OVERWORLD) && this.room.portals) {
+      // Portals (Overworld <-> Palace / Shop / Dark World / Frost Spire)
+      if (
+        (tile === T.PORTAL_DUNGEON ||
+          tile === T.PORTAL_OVERWORLD ||
+          tile === T.PORTAL_SHOP ||
+          tile === T.SHOP_EXIT) &&
+        this.room.portals
+      ) {
         const portal = this.room.portals.find((p) => p.col === col && p.row === row);
         if (portal) {
           FB.audio.play('door');
@@ -1192,7 +1533,7 @@
       }
 
       // Pit fall
-      if (tile === T.PIT && hero.dashTimer <= 0) {
+      if (tile === T.PIT && hero.dashTimer <= 0 && hero.thrownTimer <= 0) {
         hero.damage(1, hero.x, hero.y, this);
         hero.x = hero.safeX;
         hero.y = hero.safeY;
@@ -1228,7 +1569,8 @@
       const forwardOffset = isFinisher ? 16 : 13;
       const cx = isSpin ? hero.x : hero.x + dv.x * forwardOffset;
       const cy = isSpin ? hero.y : hero.y + dv.y * forwardOffset;
-      const dmg = isSpin ? 4 : hero.isClone ? 1 : isFinisher ? 3 : 2;
+      const tempBonus = hero.temperedSword && !hero.isClone ? 1 : 0;
+      const dmg = (isSpin ? 4 : hero.isClone ? 1 : isFinisher ? 3 : 2) + tempBonus;
 
       // Hit tiles (Bushes, Pots, Crystal Switches)
       const minC = Math.max(0, Math.floor((cx - reach) / TS));
@@ -1705,6 +2047,28 @@
         p.angle += dt * 16;
 
         if (p.kind === 'bomb') {
+          // Thrown bombs sail forward and decelerate cleanly!
+          if (Math.hypot(p.vx, p.vy) > 5) {
+            const nx = p.x + p.vx * dt;
+            const ny = p.y + p.vy * dt;
+            const c = Math.floor(nx / TS);
+            const r = Math.floor(ny / TS);
+            if (
+              nx > TS &&
+              nx < FB.VIEW_W - TS &&
+              ny > TS &&
+              ny < FB.VIEW_H - TS &&
+              !FB.PROJECTILE_BLOCK_TILES.has(this.room.grid[r]?.[c])
+            ) {
+              p.x = nx;
+              p.y = ny;
+            } else {
+              p.vx *= -0.35;
+              p.vy *= -0.35;
+            }
+            p.vx *= 0.88;
+            p.vy *= 0.88;
+          }
           if (Math.random() < (p.life < 0.45 ? 0.55 : 0.25)) {
             this.spawnParticles(p.x + 1, p.y - 6, '#fde047', 1, 32, { shape: 'spark', life: 0.16 });
           }
@@ -1743,12 +2107,25 @@
         } else {
           p.x += p.vx * dt;
           p.y += p.vy * dt;
+          if (p.kind === 'thrown_enemy' && p.payload && p.payload.alive) {
+            p.payload.x = p.x;
+            p.payload.y = p.y;
+          }
           if (p.kind === 'fireball' && Math.random() < 0.5) {
             this.spawnParticles(p.x, p.y, '#fb923c', 1, 18, { shape: 'dust', life: 0.18, size: 2.2 });
           } else if (p.kind === 'dark_orb' && Math.random() < 0.35) {
             this.spawnParticles(p.x, p.y, '#a855f7', 1, 15, { shape: 'dust', life: 0.16, size: 1.8 });
+          } else if (p.kind === 'beam' && Math.random() < 0.55) {
+            this.spawnParticles(p.x, p.y, '#fde047', 1, 20, { shape: 'star', life: 0.16 });
           }
           if (p.life <= 0) {
+            if (p.kind === 'thrown_pot') {
+              FB.audio.play('pot');
+              this.spawnParticles(p.x, p.y, '#d49461', 8, 65, { shape: 'spark', gravity: 135 });
+              this._dropDestructibleLoot(p.x, p.y, !!this.room.fairyPots);
+            } else if (p.kind === 'thrown_enemy' && p.payload && p.payload.alive) {
+              p.payload.hit(3, p.x, p.y, p.owner, this);
+            }
             p.alive = false;
             continue;
           }
@@ -1757,7 +2134,15 @@
         // Bounds check
         if (p.x < 4 || p.x > FB.VIEW_W - 4 || p.y < 4 || p.y > FB.VIEW_H - 4) {
           if (p.kind === 'boomerang') p.returning = true;
-          else p.alive = false;
+          else {
+            if (p.kind === 'thrown_pot') {
+              FB.audio.play('pot');
+              this.spawnParticles(p.x, p.y, '#d49461', 7, 60, { shape: 'spark', gravity: 135 });
+            } else if (p.kind === 'thrown_enemy' && p.payload && p.payload.alive) {
+              p.payload.hit(3, p.x, p.y, p.owner, this);
+            }
+            p.alive = false;
+          }
           continue;
         }
 
@@ -1774,12 +2159,14 @@
             continue;
           }
 
-          if (p.kind === 'fireball' && tile === T.TORCH_UNLIT) {
+          if ((p.kind === 'fireball' || p.kind === 'beam') && tile === T.TORCH_UNLIT) {
             this.room.grid[row][col] = T.TORCH_LIT;
             FB.audio.play('fire');
             this.spawnParticles(col * TS + 8, row * TS + 6, '#facc15', 10);
-            p.alive = false;
-            continue;
+            if (p.kind === 'fireball') {
+              p.alive = false;
+              continue;
+            }
           }
 
           if (FB.PROJECTILE_BLOCK_TILES.has(tile)) {
@@ -1787,7 +2174,15 @@
               p.returning = true;
               FB.audio.play('clink');
             } else {
-              this.spawnParticles(p.x, p.y, '#cbd5e1', 4);
+              if (p.kind === 'thrown_pot') {
+                FB.audio.play('pot');
+                this.spawnParticles(p.x, p.y, '#d49461', 8, 65, { shape: 'spark', gravity: 135 });
+                this._dropDestructibleLoot(p.x, p.y, !!this.room.fairyPots);
+              } else if (p.kind === 'thrown_enemy' && p.payload && p.payload.alive) {
+                p.payload.hit(4, p.x, p.y, p.owner, this);
+              } else {
+                this.spawnParticles(p.x, p.y, '#cbd5e1', 4);
+              }
               p.alive = false;
             }
             continue;
@@ -1797,8 +2192,38 @@
         // Entity collision
         if (p.fromEnemy) {
           for (const h of this.humanHeroes) {
-            if (h.downed) continue;
+            if (h.downed || h.thrownTimer > 0) continue;
             if (Math.hypot(h.x - p.x, h.y - p.y) < 8 + p.radius) {
+              // Passive ALttP Shield Block & Mirror Shield Reflect!
+              const canShield = h.swordTimer <= 0 && h.spinTimer <= 0 && !h.carrying && h.dashTimer <= 0;
+              if (canShield) {
+                const hdv = FB.DIR_VEC[h.dir] || FB.DIR_VEC[0];
+                const pSpd = Math.hypot(p.vx, p.vy) || 1;
+                const dot = (hdv.x * p.vx + hdv.y * p.vy) / pSpd;
+                if (dot < -0.2) {
+                  if (h.mirrorShield) {
+                    // MIRROR SHIELD REFLECT!
+                    p.fromEnemy = false;
+                    p.owner = h;
+                    p.vx = -p.vx * 1.35;
+                    p.vy = -p.vy * 1.35;
+                    p.damage = 3;
+                    p.life = 1.6;
+                    FB.audio.play('reflect');
+                    this.spawnRing(p.x, p.y, '#fde047', 14, 0.2);
+                    this.spawnParticles(p.x, p.y, '#ffffff', 7, 75, { shape: 'star' });
+                    this.addFloatingText(h.x, h.y - 12, 'REFLECT!', '#fde047');
+                  } else {
+                    // STANDARD SHIELD BLOCK!
+                    p.alive = false;
+                    FB.audio.play('clink');
+                    this.spawnParticles(p.x, p.y, '#e2e8f0', 6, 65, { shape: 'spark' });
+                    this.addFloatingText(h.x, h.y - 10, 'BLOCK', '#cbd5e1');
+                  }
+                  break;
+                }
+              }
+
               h.damage(p.damage, p.x, p.y, this);
               p.alive = false;
               break;
@@ -1806,9 +2231,9 @@
           }
         } else {
           for (const e of this.enemies) {
-            if (!e.alive) continue;
+            if (!e.alive || e === p.payload) continue;
 
-            // Arrows / Boomerang / Fireball can also pop boss shield orbs!
+            // Arrows / Boomerang / Fireball / Beam can also pop boss shield orbs!
             if (e.type === 'boss' && e.orbs) {
               for (const orb of e.orbs) {
                 if (!orb.alive) continue;
@@ -1820,17 +2245,29 @@
                   this.spawnParticles(ox, oy, '#f43f5e', 6);
                   if (orb.hp <= 0) orb.alive = false;
                   if (p.kind === 'boomerang') p.returning = true;
-                  else p.alive = false;
+                  else if (p.kind !== 'beam') p.alive = false;
                 }
               }
             }
 
-            if (p.alive && Math.hypot(e.x - p.x, e.y - p.y) < e.w * 0.55 + p.radius) {
+            if (p.alive && !p.hitSet.has(e.id) && Math.hypot(e.x - p.x, e.y - p.y) < e.w * 0.55 + p.radius) {
+              p.hitSet.add(e.id);
               e.hit(p.damage, p.x, p.y, p.owner, this, {
-                stun: p.kind === 'boomerang' ? 2.4 : 0,
+                stun: p.kind === 'boomerang' ? 2.4 : p.kind === 'thrown_pot' ? 0.6 : 0,
               });
-              if (p.kind === 'boomerang') p.returning = true;
-              else p.alive = false;
+              if (p.kind === 'thrown_pot') {
+                FB.audio.play('pot');
+                this.spawnParticles(p.x, p.y, '#d49461', 8, 65, { shape: 'spark', gravity: 135 });
+                this._dropDestructibleLoot(p.x, p.y, !!this.room.fairyPots);
+                p.alive = false;
+              } else if (p.kind === 'thrown_enemy' && p.payload && p.payload.alive) {
+                p.payload.hit(3, p.x, p.y, p.owner, this);
+                p.alive = false;
+              } else if (p.kind === 'boomerang') {
+                p.returning = true;
+              } else if (p.kind !== 'beam') {
+                p.alive = false;
+              }
               break;
             }
           }
@@ -1842,6 +2279,7 @@
 
     explodeBomb(bomb) {
       const blastRadius = 32;
+      const heroBlastRadius = 24;
       FB.audio.play('bombBoom');
       this.screenShake = 6;
       this.spawnRing(bomb.x, bomb.y, '#fde047', 34, 0.28);
@@ -1849,6 +2287,13 @@
       this.spawnParticles(bomb.x, bomb.y, '#fb923c', 16, 95, { shape: 'spark' });
       this.spawnParticles(bomb.x, bomb.y, '#fde047', 12, 70, { shape: 'star' });
       this.spawnParticles(bomb.x, bomb.y, '#e2e8f0', 10, 50, { shape: 'dust', size: 3.2, life: 0.38 });
+
+      // Clear carrying ref if a hero was holding this bomb when it blew up!
+      for (const h of this.humanHeroes) {
+        if (h.carrying && h.carrying.ref === bomb) {
+          h.carrying = null;
+        }
+      }
 
       // Blast cracked walls, cracked boulders, bushes, pots, crystal switches!
       const minC = Math.max(0, Math.floor((bomb.x - blastRadius) / TS));
@@ -1886,6 +2331,7 @@
       if (discoveredSecret) {
         FB.audio.play('secret');
         this.showToast('You blasted open a secret passage!', 3.0);
+        this.saveProgress();
       }
 
       // Blast enemies
@@ -1893,6 +2339,14 @@
         if (!e.alive) continue;
         if (Math.hypot(e.x - bomb.x, e.y - bomb.y) < blastRadius + e.w * 0.5) {
           e.hit(bomb.damage, bomb.x, bomb.y, bomb.owner, this, { isBomb: true, ignoreOrbs: true });
+        }
+      }
+
+      // Close-range Bomb Self-Damage to heroes caught inside blast vicinity!
+      for (const h of this.humanHeroes) {
+        if (h.downed) continue;
+        if (Math.hypot(h.x - bomb.x, h.y - bomb.y) <= heroBlastRadius) {
+          h.damage(2, bomb.x, bomb.y, this);
         }
       }
     }
@@ -1913,28 +2367,31 @@
       this.pickups = this.pickups.filter((i) => i.alive);
     }
 
+    _awardRupeesWithStreak(hero, baseAmount, x, y, color, bigSfx = false) {
+      hero.streakCount = (hero.streakCount || 0) + 1;
+      hero.streakTimer = 3.5;
+      const mult = hero.streakCount >= 6 ? 3 : hero.streakCount >= 3 ? 2 : 1;
+      const total = baseAmount * mult;
+      hero.rupees += total;
+      FB.audio.play(bigSfx || mult > 1 ? 'bigRupee' : 'rupee');
+      const label = mult > 1 ? `+${total} ×${mult}!` : `+${total}`;
+      this.addFloatingText(x, y - 6, label, mult > 1 ? '#fde047' : color);
+    }
+
     collectPickup(item, hero) {
       item.alive = false;
       switch (item.kind) {
         case 'rupee_green':
-          hero.rupees += 1;
-          FB.audio.play('rupee');
-          this.addFloatingText(item.x, item.y - 6, '+1', '#4ade80');
+          this._awardRupeesWithStreak(hero, 1, item.x, item.y, '#4ade80', false);
           break;
         case 'rupee_blue':
-          hero.rupees += 5;
-          FB.audio.play('rupee');
-          this.addFloatingText(item.x, item.y - 6, '+5', '#60a5fa');
+          this._awardRupeesWithStreak(hero, 5, item.x, item.y, '#60a5fa', false);
           break;
         case 'rupee_red':
-          hero.rupees += 20;
-          FB.audio.play('bigRupee');
-          this.addFloatingText(item.x, item.y - 6, '+20', '#f87171');
+          this._awardRupeesWithStreak(hero, 20, item.x, item.y, '#f87171', true);
           break;
         case 'rupee_purple':
-          hero.rupees += 50;
-          FB.audio.play('bigRupee');
-          this.addFloatingText(item.x, item.y - 6, '+50', '#c084fc');
+          this._awardRupeesWithStreak(hero, 50, item.x, item.y, '#c084fc', true);
           break;
         case 'heart':
           hero.heal(2);
@@ -2094,6 +2551,14 @@
           for (let c = 0; c < FB.ROOM_COLS; c++) {
             FB.sprites.drawTile(ctx, this.room.grid[r][c], c * TS, r * TS, this.time);
           }
+        }
+      }
+
+      // 1b. Render Shop Pedestal Goods
+      if (this.room && this.room.shopItems) {
+        for (const s of this.room.shopItems) {
+          const cat = FB.SHOP_CATALOG.find((c) => c.id === s.catalogId);
+          if (cat) FB.sprites.drawShopItem(ctx, s.col, s.row, cat, this.time);
         }
       }
 
@@ -2262,6 +2727,21 @@
         ctx.beginPath();
         ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
         ctx.fill();
+      } else if (p.kind === 'beam') {
+        const ang = Math.atan2(p.vy, p.vx);
+        ctx.rotate(ang);
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.45)';
+        ctx.fillRect(-10, -4, 18, 8);
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(-8, -2, 16, 4);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-5, -1, 13, 2);
+      } else if (p.kind === 'thrown_pot') {
+        ctx.rotate(p.angle * 0.5);
+        ctx.fillStyle = '#9e6238';
+        ctx.fillRect(-4, -4, 8, 8);
+        ctx.fillStyle = '#d49461';
+        ctx.fillRect(-3, -3, 4, 3);
       }
 
       ctx.restore();

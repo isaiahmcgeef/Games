@@ -286,11 +286,18 @@
         const itemTag = item
           ? `<span class="hud-item-pill" style="--pill-color:${item.color}">${item.short}</span>`
           : `<span class="hud-item-pill">—</span>`;
+        const badges = [
+          h.potions > 0 ? `🧪${h.potions}` : '',
+          h.mirrorShield ? '🛡' : '',
+          h.temperedSword ? '⚔' : '',
+        ]
+          .filter(Boolean)
+          .join('');
 
         html += `
           <div class="hud-hero-card ${h.downed ? 'downed' : ''}" style="--hero-color:${h.profile.uiColor}">
             <div class="hud-hero-top">
-              <span class="hud-hero-badge">P${h.index + 1} ${h.profile.name}</span>
+              <span class="hud-hero-badge">P${h.index + 1} ${h.profile.name}${badges ? ' ' + badges : ''}</span>
               <span class="hud-rupees">◆ ${h.rupees}</span>
               ${itemTag}
             </div>

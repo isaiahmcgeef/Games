@@ -467,6 +467,57 @@
           px(7, 9, 2, 2, '#eab308');
           break;
 
+        case T.PORTAL_SHOP:
+          // Cozy shop doorway with crimson awning & golden rupee emblem
+          px(0, 0, 16, 16, '#6e4323');
+          px(0, 0, 16, 4, '#b91c1c');
+          px(1, 1, 14, 2, '#ef4444');
+          px(6, 1, 4, 2, '#fde047');
+          px(2, 4, 12, 12, '#1e1610');
+          px(4, 6, 8, 10, '#2e2118');
+          px(6, 8, 4, 5, '#4ade80');
+          break;
+
+        case T.SHOP_FLOOR:
+          px(0, 0, 16, 16, '#7a5230');
+          px(0, 0, 16, 1, '#5c3b20');
+          px(0, 8, 16, 1, '#5c3b20');
+          px(7, 1, 1, 7, '#634024');
+          px(12, 9, 1, 7, '#634024');
+          px(2, 3, 4, 1, '#8f623c');
+          px(5, 11, 5, 1, '#8f623c');
+          break;
+
+        case T.SHOP_EXIT:
+          px(0, 0, 16, 16, '#7a5230');
+          px(1, 2, 14, 12, '#991b1b');
+          px(2, 3, 12, 10, '#dc2626');
+          px(3, 4, 10, 1, '#facc15');
+          px(3, 11, 10, 1, '#facc15');
+          break;
+
+        case T.SHOP_COUNTER:
+          px(0, 0, 16, 16, '#5c3b20');
+          px(0, 1, 16, 6, '#b57643');
+          px(0, 1, 16, 2, '#d49461');
+          px(0, 7, 16, 8, '#7a4b26');
+          px(0, 14, 16, 2, '#3d2513');
+          break;
+
+        case T.MERCHANT:
+          px(0, 0, 16, 16, '#7a5230');
+          // Cozy shopkeeper in ruby robe with golden trim & beard
+          px(3, 7, 10, 8, '#991b1b');
+          px(5, 7, 6, 8, '#dc2626');
+          px(7, 8, 2, 7, '#facc15');
+          px(4, 2, 8, 6, '#f6c79c');
+          px(3, 0, 10, 3, '#7e22ce');
+          px(5, 1, 6, 1, '#fde047');
+          px(5, 4, 1, 2, '#111827');
+          px(10, 4, 1, 2, '#111827');
+          px(5, 6, 6, 3, '#e2e8f0'); // Beard
+          break;
+
         default:
           drawGrassBase();
       }
@@ -734,12 +785,12 @@
       ctx.fillStyle = p.accent;
       ctx.fillRect(x + 7, Math.round(y + 11 + bobY), 2, 1);
 
-      // Animated Arms (celebrate overhead / push brace / walking swing)
+      // Animated Arms (celebrate / carrying overhead / push brace / walking swing)
       ctx.fillStyle = p.skin;
-      if (hero.celebrateTimer > 0) {
-        // Both arms triumphantly raised overhead!
-        ctx.fillRect(x + 2, Math.round(y + 2 + bobY), 2, 5);
-        ctx.fillRect(x + 12, Math.round(y + 2 + bobY), 2, 5);
+      if (hero.celebrateTimer > 0 || hero.carrying) {
+        // Both arms raised overhead!
+        ctx.fillRect(x + 2, Math.round(y + 1 + bobY), 2, 6);
+        ctx.fillRect(x + 12, Math.round(y + 1 + bobY), 2, 6);
       } else if (hero.pushing) {
         // Leaning braced hands
         ctx.fillRect(x + 2 + dv.x * 2, Math.round(y + 8 + dv.y * 2), 2, 3);
@@ -804,17 +855,19 @@
         }
       }
 
-      // Ornate Hylian Shield on off-hand (tucks away during celebrate/spin)
-      if (hero.celebrateTimer <= 0 && hero.spinTimer <= 0) {
-        const shieldColor = '#e5be53';
-        const shieldInner = p.tunicDark;
+      // Ornate Hylian Shield / Mirror Shield on off-hand
+      if (hero.celebrateTimer <= 0 && hero.spinTimer <= 0 && !hero.carrying) {
+        const isMirror = !!hero.mirrorShield;
+        const shieldColor = isMirror ? '#fde047' : '#e5be53';
+        const shieldInner = isMirror ? '#dc2626' : p.tunicDark;
+        const sheen = isMirror && Math.floor(time * 6 + hero.index) % 4 === 0 ? '#ffffff' : '#fef08a';
         if (drawDir === FB.DIRS.DOWN) {
           ctx.fillStyle = shieldColor;
           ctx.fillRect(x + 11, Math.round(y + 8 + bobY), 4, 5);
           ctx.fillStyle = shieldInner;
           ctx.fillRect(x + 12, Math.round(y + 9 + bobY), 2, 3);
-          ctx.fillStyle = '#fef08a';
-          ctx.fillRect(x + 12, Math.round(y + 9 + bobY), 1, 1);
+          ctx.fillStyle = sheen;
+          ctx.fillRect(x + 12, Math.round(y + 9 + bobY), 1, 2);
         } else if (drawDir === FB.DIRS.LEFT) {
           ctx.fillStyle = shieldColor;
           ctx.fillRect(x + 2, Math.round(y + 8 + bobY), 3, 5);
@@ -825,6 +878,28 @@
           ctx.fillRect(x + 11, Math.round(y + 8 + bobY), 3, 5);
           ctx.fillStyle = shieldInner;
           ctx.fillRect(x + 12, Math.round(y + 9 + bobY), 2, 3);
+        }
+      }
+
+      // Render Overhead Carried Object (Pot, Bomb, Stunned Enemy!)
+      if (hero.carrying) {
+        const cy = Math.round(y - 7 + bobY);
+        if (hero.carrying.kind === 'pot') {
+          ctx.fillStyle = '#9e6238';
+          ctx.fillRect(x + 4, cy, 8, 8);
+          ctx.fillStyle = '#b57445';
+          ctx.fillRect(x + 3, cy + 2, 10, 5);
+          ctx.fillStyle = '#d49461';
+          ctx.fillRect(x + 5, cy - 1, 6, 2);
+        } else if (hero.carrying.kind === 'bomb') {
+          const b = hero.carrying.ref;
+          const urgent = b && b.life < 0.45 && Math.floor(time * 22) % 2 === 0;
+          ctx.fillStyle = urgent ? '#ef4444' : '#312e81';
+          ctx.beginPath();
+          ctx.arc(hero.x, cy + 4, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#facc15';
+          ctx.fillRect(hero.x, cy - 3, 2, 2);
         }
       }
 
@@ -1584,6 +1659,59 @@
           break;
         }
       }
+      ctx.restore();
+    }
+
+    drawShopItem(ctx, col, row, catalogItem, time) {
+      const cx = col * TS + 8;
+      const cy = row * TS + 6 + Math.sin(time * 5 + col) * 1.4;
+
+      ctx.save();
+      // Glow halo
+      ctx.fillStyle = 'rgba(253, 224, 71, 0.22)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (catalogItem.id === 'heal') {
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(cx - 4, cy - 2, 3, 3);
+        ctx.fillRect(cx + 1, cy - 2, 3, 3);
+        ctx.fillRect(cx - 3, cy, 6, 3);
+        ctx.fillRect(cx - 1, cy + 3, 2, 2);
+      } else if (catalogItem.id === 'potion') {
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(cx - 2, cy - 5, 4, 2);
+        ctx.fillStyle = '#f43f5e';
+        ctx.fillRect(cx - 3, cy - 3, 6, 6);
+        ctx.fillStyle = '#fda4af';
+        ctx.fillRect(cx - 2, cy - 2, 2, 3);
+      } else if (catalogItem.id === 'mirror_shield') {
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(cx - 4, cy - 4, 8, 9);
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(cx - 3, cy - 3, 6, 7);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(cx - 2, cy - 2, 2, 4);
+      } else if (catalogItem.id === 'tempered_sword') {
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 4, cy + 4);
+        ctx.lineTo(cx + 4, cy - 4);
+        ctx.stroke();
+        ctx.fillStyle = '#fb923c';
+        ctx.fillRect(cx - 4, cy + 1, 4, 2);
+      }
+
+      // Crisp Price Tag below pedestal
+      const tagY = row * TS + 18;
+      ctx.fillStyle = 'rgba(9, 14, 24, 0.85)';
+      ctx.fillRect(cx - 10, tagY - 5, 20, 7);
+      ctx.fillStyle = '#6ee7b7';
+      ctx.font = 'bold 5.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${catalogItem.cost}R`, cx, tagY + 0.5);
       ctx.restore();
     }
   }

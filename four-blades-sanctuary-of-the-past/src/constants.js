@@ -74,7 +74,47 @@
     ROCK_CRACKED: 41,
     STATUE: 42,
     TRIFORCE_ALTAR: 43,
+    PORTAL_SHOP: 44,
+    SHOP_EXIT: 45,
+    SHOP_COUNTER: 46,
+    MERCHANT: 47,
+    SHOP_FLOOR: 48,
   };
+
+  FB.SHOP_CATALOG = [
+    {
+      id: 'heal',
+      name: 'Heart Refill',
+      short: 'HEAL',
+      cost: 15,
+      color: '#ef4444',
+      desc: 'Restores all of your hearts immediately.',
+    },
+    {
+      id: 'potion',
+      name: 'Red Potion',
+      short: 'POTION',
+      cost: 35,
+      color: '#f43f5e',
+      desc: 'Auto-revives you with full hearts upon taking fatal damage!',
+    },
+    {
+      id: 'mirror_shield',
+      name: 'Mirror Shield',
+      short: 'SHIELD',
+      cost: 60,
+      color: '#facc15',
+      desc: 'Reflects blocked enemy projectiles right back at foes!',
+    },
+    {
+      id: 'tempered_sword',
+      name: 'Tempered Blade',
+      short: 'BLADE',
+      cost: 80,
+      color: '#fb923c',
+      desc: '+1 Sword Damage and fires golden Sword Beams on Hit 3 at full health!',
+    },
+  ];
 
   FB.SOLID_TILES = new Set([
     FB.TILES.TREE,
@@ -102,6 +142,8 @@
     FB.TILES.SIGN,
     FB.TILES.ROCK_CRACKED,
     FB.TILES.STATUE,
+    FB.TILES.SHOP_COUNTER,
+    FB.TILES.MERCHANT,
   ]);
 
   // Projectiles can fly over water, pits, bushes, low obstacles

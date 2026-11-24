@@ -254,6 +254,37 @@
             this._tone(f, i * 0.06, 0.14, 'triangle', 0.08);
           });
           break;
+        case 'lift':
+          this._tone(240, 0, 0.07, 'triangle', 0.08, 460);
+          break;
+        case 'throw':
+          this._noise(0, 0.08, 0.08, 1900);
+          this._tone(480, 0, 0.08, 'triangle', 0.07, 220);
+          break;
+        case 'hurricane':
+          this._noise(0, 0.36, 0.16, 1800);
+          [440, 554, 659, 880, 1108].forEach((f, i) => {
+            this._tone(f, i * 0.04, 0.16, 'square', 0.065);
+          });
+          break;
+        case 'beam':
+          this._tone(1180, 0, 0.09, 'square', 0.065, 1760);
+          this._tone(880, 0.03, 0.1, 'triangle', 0.07, 1320);
+          break;
+        case 'reflect':
+          this._tone(1560, 0, 0.07, 'sine', 0.09, 2340);
+          this._tone(1170, 0.02, 0.09, 'triangle', 0.08, 1760);
+          break;
+        case 'buy':
+          [659, 880, 1318].forEach((f, i) => {
+            this._tone(f, i * 0.055, 0.12, 'square', 0.07);
+          });
+          break;
+        case 'potion':
+          [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => {
+            this._tone(f, i * 0.05, 0.14, 'sine', 0.085);
+          });
+          break;
       }
     }
 

@@ -78,6 +78,20 @@
       this.comboStep = 0; // 0 = Forehand, 1 = Backhand, 2 = Heroic Thrust
       this.comboTimer = 0;
       this.parryFlash = 0;
+
+      // Lift & Throw, Shop Upgrades & Rupee Streak state
+      this.carrying = null; // { kind: 'pot' | 'bomb' | 'enemy' | 'hero', ref }
+      this.carriedBy = null;
+      this.thrownTimer = 0;
+      this.thrownVx = 0;
+      this.thrownVy = 0;
+      this.temperedSword = false;
+      this.mirrorShield = false;
+      this.potions = 0;
+      this.streakCount = 0;
+      this.streakTimer = 0;
+      this.iceVx = 0;
+      this.iceVy = 0;
     }
 
     get currentItem() {
@@ -105,11 +119,20 @@
     }
 
     damage(amount, srcX, srcY, game) {
-      if (this.isClone || this.downed || this.invuln > 0 || this.dashTimer > 0) return;
-      this.hp = Math.max(0, this.hp - amount);
-      this.damageTaken += amount;
+      if (this.isClone || this.downed || this.invuln > 0 || this.dashTimer > 0 || this.thrownTimer > 0) return;
+      const mult = game.heroMode ? 2 : 1;
+      const finalAmt = Math.max(1, Math.round(amount * mult));
+      this.hp = Math.max(0, this.hp - finalAmt);
+      this.damageTaken += finalAmt;
       this.invuln = FB.CONFIG.INVULN_TIME;
       this.spinCharge = 0;
+      this.streakCount = 0;
+      this.streakTimer = 0;
+
+      // Drop carried object if hurt
+      if (this.carrying && game.dropCarried) {
+        game.dropCarried(this);
+      }
 
       const angle = Math.atan2(this.y - srcY, this.x - srcX);
       this.knockX = Math.cos(angle) * 145;
@@ -121,12 +144,23 @@
       game.spawnParticles(this.x, this.y, '#ef4444', 7);
 
       if (this.hp <= 0) {
+        // Red Potion Auto-Revive!
+        if (this.potions > 0) {
+          this.potions -= 1;
+          this.hp = this.maxHp;
+          this.invuln = 1.6;
+          FB.audio.play('potion');
+          game.spawnRing(this.x, this.y, '#f43f5e', 24, 0.35);
+          game.spawnParticles(this.x, this.y, '#fda4af', 14, 70, { shape: 'star' });
+          game.addFloatingText(this.x, this.y - 12, 'POTION REVIVE!', '#fb7185');
+          game.showToast(`${this.profile.name}'s Red Potion restored full health!`, 2.8);
+          return;
+        }
         if (game.humanHeroes.length > 1) {
           this.downed = true;
           this.reviveProgress = 0;
           game.showToast(`${this.profile.name} fell! Stand beside them to revive!`);
         } else {
-          // Solo defeat -> handled by game over check
           this.downed = true;
         }
       }
@@ -313,9 +347,11 @@
 
   class Projectile {
     constructor(opts) {
-      this.kind = opts.kind; // 'boomerang' | 'bomb' | 'arrow' | 'fireball' | 'rock' | 'bone' | 'dark_orb'
+      this.kind = opts.kind; // 'boomerang' | 'bomb' | 'arrow' | 'fireball' | 'rock' | 'bone' | 'dark_orb' | 'beam' | 'thrown_pot' | 'thrown_enemy' | 'hookshot' | 'ice_shard'
       this.x = opts.x;
       this.y = opts.y;
+      this.startX = opts.x;
+      this.startY = opts.y;
       this.vx = opts.vx || 0;
       this.vy = opts.vy || 0;
       this.owner = opts.owner || null;
@@ -328,6 +364,8 @@
       this.alive = true;
       this.angle = 0;
       this.carriedPickup = null;
+      this.payload = opts.payload || null;
+      this.hitSet = new Set();
     }
   }
 

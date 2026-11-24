@@ -48,6 +48,11 @@
     'R': T.ROCK_CRACKED,
     'A': T.STATUE,
     'Z': T.TRIFORCE_ALTAR,
+    '$': T.PORTAL_SHOP,
+    'v': T.SHOP_EXIT,
+    'W': T.SHOP_COUNTER,
+    'M': T.MERCHANT,
+    'f': T.SHOP_FLOOR,
   };
 
   FB.parseGrid = function parseGrid(rows) {

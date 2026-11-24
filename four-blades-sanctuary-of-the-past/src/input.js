@@ -80,6 +80,7 @@
         dashPressed: false,
         cyclePressed: false,
         clonePressed: false,
+        grabPressed: false,
         interactPressed: false,
       };
 
@@ -97,6 +98,7 @@
         const dashKeys = ['KeyL', 'KeyC', 'ShiftLeft'];
         const cycleKeys = ['KeyU', 'KeyE'];
         const cloneKeys = ['KeyQ', 'Tab'];
+        const grabKeys = ['KeyF'];
 
         state.attackDown = this._anyDown(atkKeys);
         state.attackPressed = this._anyJustPressed(atkKeys);
@@ -104,7 +106,8 @@
         state.dashPressed = this._anyJustPressed(dashKeys);
         state.cyclePressed = this._anyJustPressed(cycleKeys);
         state.clonePressed = this._anyJustPressed(cloneKeys);
-        state.interactPressed = state.attackPressed || this._anyJustPressed(['KeyF']);
+        state.grabPressed = this._anyJustPressed(grabKeys);
+        state.interactPressed = state.attackPressed || state.grabPressed;
       } else if (playerIndex === 1) {
         if (this._anyDown(['ArrowUp'])) state.dy -= 1;
         if (this._anyDown(['ArrowDown'])) state.dy += 1;
@@ -115,13 +118,15 @@
         const itemKeys = ['Numpad2', 'Slash', 'KeyM'];
         const dashKeys = ['Numpad3', 'Comma', 'ShiftRight'];
         const cycleKeys = ['Numpad0', 'Semicolon', 'Quote'];
+        const grabKeys = ['Backslash', 'ControlRight', 'NumpadDecimal'];
 
         state.attackDown = this._anyDown(atkKeys);
         state.attackPressed = this._anyJustPressed(atkKeys);
         state.itemPressed = this._anyJustPressed(itemKeys);
         state.dashPressed = this._anyJustPressed(dashKeys);
         state.cyclePressed = this._anyJustPressed(cycleKeys);
-        state.interactPressed = state.attackPressed;
+        state.grabPressed = this._anyJustPressed(grabKeys);
+        state.interactPressed = state.attackPressed || state.grabPressed;
       }
 
       // Gamepad support (works seamlessly alongside keyboard for P1-P4!)
@@ -145,14 +150,15 @@
         const down = (idx) => !!pad.buttons[idx]?.pressed;
         const just = (idx) => down(idx) && !prev[idx];
 
-        // A(0)/X(2)=Sword, B(1)=Item, Y(3)/RB(5)=Dash, LB(4)=Cycle, Back/Select(8)=Clone
-        if (down(0) || down(2)) state.attackDown = true;
-        if (just(0) || just(2)) state.attackPressed = true;
+        // A(0)=Sword/Spin, B(1)=Item, X(2)=Grab/Throw, Y(3)/RB(5)=Dash, LB(4)=Cycle, Back(8)=Clone
+        if (down(0)) state.attackDown = true;
+        if (just(0)) state.attackPressed = true;
         if (just(1)) state.itemPressed = true;
+        if (just(2)) state.grabPressed = true;
         if (just(3) || just(5)) state.dashPressed = true;
         if (just(4)) state.cyclePressed = true;
         if (just(8)) state.clonePressed = true;
-        if (just(0)) state.interactPressed = true;
+        if (just(0) || just(2)) state.interactPressed = true;
       }
 
       // Normalize diagonal movement
