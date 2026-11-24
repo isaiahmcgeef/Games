@@ -13,8 +13,8 @@
     constructor() {
       this.canvas = document.getElementById('game-canvas');
       this.ctx = this.canvas.getContext('2d');
-      this.canvas.width = FB.VIEW_W;
-      this.canvas.height = FB.VIEW_H;
+      this.canvas.width = FB.RENDER_W;
+      this.canvas.height = FB.RENDER_H;
       this.ctx.imageSmoothingEnabled = false;
 
       this.state = 'title'; // 'title' | 'playing' | 'paused' | 'gameover' | 'victory'
@@ -37,6 +37,8 @@
       this.pickups = [];
       this.particles = [];
       this.floatingTexts = [];
+      this.ambientMotes = [];
+      this.butterflies = [];
 
       this.smallKeys = 0;
       this.hasBossKey = false;
@@ -51,6 +53,9 @@
       this.activeDialog = null;
       this.dialogTimer = 0;
       this.hudTick = 0;
+      this.roomCanvas = null;
+      this.roomCtx = null;
+      this.roomCacheKey = null;
       this.darkCanvas = null;
       this.darkCtx = null;
       this.lastFrameTime = performance.now();
@@ -62,9 +67,10 @@
       FB.ui.renderSaveSlots(this);
       FB.ui.setOverlay('title');
 
-      // Show animated sanctuary background behind title screen
+      // Show animated Hi-Bit sanctuary courtyard behind title screen
       this.rooms = FB.createWorldData();
       this.room = this.rooms.ow_start;
+      this.initRoomAtmosphere(this.room);
 
       this.loop = this.loop.bind(this);
       requestAnimationFrame(this.loop);
@@ -401,7 +407,8 @@
               spec.type,
               spec.col * TS + 8,
               spec.row * TS + 8,
-              this.humanHeroes.length
+              this.humanHeroes.length,
+              room.area || 'overworld'
             )
           );
         }
@@ -441,6 +448,7 @@
         FB.audio.playMusic(room.area === 'dungeon' || room.area === 'frost' ? 'dungeon' : 'overworld');
       }
 
+      this.initRoomAtmosphere(room);
       this.transitionOverlayAlpha = 0.85;
       if (this.state === 'playing') {
         this.saveProgress();
@@ -523,6 +531,8 @@
 
       if (this.state === 'playing') {
         this.update(dt);
+      } else if (this.state === 'title') {
+        this.updateAtmosphere(dt);
       }
 
       this.render();
@@ -583,12 +593,13 @@
         return;
       }
 
-      // Update Enemies, Projectiles, Pickups, Puzzles, Particles
+      // Update Enemies, Projectiles, Pickups, Puzzles, Particles & Ambient Weather
       this.updateEnemies(dt);
       this.updateProjectiles(dt);
       this.updatePickups(dt);
       this.updatePuzzles();
       this.updateParticles(dt);
+      this.updateAtmosphere(dt);
 
       // Refresh HUD ~10 times/sec for smooth hearts/rupees/minimap
       this.hudTick += dt;
@@ -3004,35 +3015,231 @@
       this.floatingTexts = this.floatingTexts.filter((ft) => ft.life > 0);
     }
 
+    _computeRoomHash(room) {
+      if (!room || !room.grid) return '';
+      let h = 2166136261;
+      for (let r = 0; r < FB.ROOM_ROWS; r++) {
+        const row = room.grid[r];
+        for (let c = 0; c < FB.ROOM_COLS; c++) {
+          h ^= row[c];
+          h = Math.imul(h, 16777619);
+        }
+      }
+      return `${room.id}:${room.area}:${h >>> 0}`;
+    }
+
+    initRoomAtmosphere(room) {
+      this.ambientMotes = [];
+      this.butterflies = [];
+      if (!room) return;
+      const area = room.area || 'overworld';
+
+      if (area === 'overworld') {
+        // Sunlit pollen motes + fluttering colorful pixel butterflies!
+        for (let i = 0; i < 14; i++) {
+          this.ambientMotes.push({
+            x: Math.random() * FB.RENDER_W,
+            y: Math.random() * FB.RENDER_H,
+            vx: 6 + Math.random() * 10,
+            vy: -4 + Math.random() * 8,
+            size: Math.random() < 0.4 ? 3 : 2,
+            phase: Math.random() * Math.PI * 2,
+            color: Math.random() < 0.5 ? '#fef08a' : '#dcfce7',
+          });
+        }
+        const bfColors = [
+          ['#fde047', '#f59e0b'],
+          ['#7dd3fc', '#38bdf8'],
+          ['#f9a8d4', '#f472b6'],
+        ];
+        for (let i = 0; i < 3; i++) {
+          this.butterflies.push({
+            x: 80 + Math.random() * (FB.RENDER_W - 160),
+            y: 60 + Math.random() * (FB.RENDER_H - 120),
+            ang: Math.random() * Math.PI * 2,
+            turnTimer: 0.8 + Math.random() * 1.4,
+            phase: Math.random() * Math.PI * 2,
+            colors: bfColors[i % bfColors.length],
+          });
+        }
+      } else if (area === 'frost') {
+        // Multi-depth gently falling crisp pixel snowflakes!
+        for (let i = 0; i < 28; i++) {
+          const depth = Math.random() < 0.35 ? 2 : 1;
+          this.ambientMotes.push({
+            x: Math.random() * FB.RENDER_W,
+            y: Math.random() * FB.RENDER_H,
+            vx: -10 - depth * 6 + Math.random() * 8,
+            vy: 18 + depth * 14 + Math.random() * 10,
+            size: depth === 2 ? 3 : 2,
+            phase: Math.random() * Math.PI * 2,
+            color: depth === 2 ? '#ffffff' : '#bae6fd',
+          });
+        }
+      } else if (area === 'darkworld') {
+        // Rising violet/magenta twilight spores!
+        for (let i = 0; i < 20; i++) {
+          this.ambientMotes.push({
+            x: Math.random() * FB.RENDER_W,
+            y: Math.random() * FB.RENDER_H,
+            vx: -6 + Math.random() * 12,
+            vy: -10 - Math.random() * 14,
+            size: Math.random() < 0.4 ? 3 : 2,
+            phase: Math.random() * Math.PI * 2,
+            color: Math.random() < 0.5 ? '#c084fc' : '#f472b6',
+          });
+        }
+      } else if (area === 'dungeon' || area === 'shop') {
+        // Floating warm sanctuary dust motes
+        const count = area === 'shop' ? 10 : 16;
+        for (let i = 0; i < count; i++) {
+          this.ambientMotes.push({
+            x: Math.random() * FB.RENDER_W,
+            y: Math.random() * FB.RENDER_H,
+            vx: -4 + Math.random() * 8,
+            vy: -5 - Math.random() * 7,
+            size: 2,
+            phase: Math.random() * Math.PI * 2,
+            color: area === 'shop' ? '#fde68a' : '#cbd5e1',
+          });
+        }
+      }
+    }
+
+    updateAtmosphere(dt) {
+      for (const m of this.ambientMotes) {
+        m.phase += dt * 3;
+        m.x += (m.vx + Math.sin(m.phase) * 8) * dt;
+        m.y += m.vy * dt;
+        if (m.x < -8) m.x = FB.RENDER_W + 6;
+        if (m.x > FB.RENDER_W + 8) m.x = -6;
+        if (m.y < -8) m.y = FB.RENDER_H + 6;
+        if (m.y > FB.RENDER_H + 8) m.y = -6;
+      }
+
+      for (const bf of this.butterflies) {
+        bf.phase += dt * 16;
+        bf.turnTimer -= dt;
+        if (bf.turnTimer <= 0) {
+          bf.turnTimer = 0.7 + Math.random() * 1.6;
+          bf.ang += (Math.random() - 0.5) * 1.9;
+        }
+        bf.x += Math.cos(bf.ang) * 26 * dt;
+        bf.y += Math.sin(bf.ang) * 22 * dt + Math.sin(bf.phase * 0.5) * 10 * dt;
+        if (bf.x < 48 || bf.x > FB.RENDER_W - 48) bf.ang = Math.PI - bf.ang;
+        if (bf.y < 48 || bf.y > FB.RENDER_H - 48) bf.ang = -bf.ang;
+      }
+    }
+
+    renderAtmosphere(ctx) {
+      if (!this.room) return;
+      const area = this.room.area || 'overworld';
+
+      ctx.save();
+
+      // Subtle diagonal golden sunbeams in Light Overworld!
+      if (area === 'overworld') {
+        ctx.fillStyle = 'rgba(255, 248, 195, 0.055)';
+        for (let i = 0; i < 3; i++) {
+          const bx = 70 + i * 210 + Math.sin(this.time * 0.5 + i) * 14;
+          ctx.beginPath();
+          ctx.moveTo(bx, 0);
+          ctx.lineTo(bx + 78, 0);
+          ctx.lineTo(bx - 55, FB.RENDER_H);
+          ctx.lineTo(bx - 133, FB.RENDER_H);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else if (area === 'darkworld') {
+        // Drifting eerie twilight mist ribbons
+        const drift = (this.time * 18) % FB.RENDER_W;
+        ctx.fillStyle = 'rgba(139, 92, 246, 0.06)';
+        ctx.fillRect(0, 70 + Math.sin(this.time * 0.7) * 14, FB.RENDER_W, 44);
+        ctx.fillRect((drift - 220) % FB.RENDER_W, 250 + Math.cos(this.time * 0.6) * 14, 280, 38);
+      } else if (area === 'shop') {
+        // Warm cozy amber lantern glow overhead
+        const g = ctx.createRadialGradient(FB.RENDER_W / 2, 120, 20, FB.RENDER_W / 2, 160, 290);
+        g.addColorStop(0, 'rgba(254, 215, 130, 0.14)');
+        g.addColorStop(1, 'rgba(254, 215, 130, 0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
+      }
+
+      // Ambient motes (pollen / dust / twilight spores / pixel snow)
+      for (const m of this.ambientMotes) {
+        const pulse = 0.45 + Math.sin(m.phase) * 0.3;
+        ctx.globalAlpha = area === 'frost' ? 0.85 : pulse;
+        ctx.fillStyle = m.color;
+        ctx.fillRect(Math.round(m.x), Math.round(m.y), m.size, m.size);
+      }
+      ctx.globalAlpha = 1;
+
+      // Fluttering Hi-Bit pixel butterflies in Light Overworld!
+      for (const bf of this.butterflies) {
+        const bx = Math.round(bf.x);
+        const by = Math.round(bf.y);
+        const flap = Math.sin(bf.phase) > 0;
+        ctx.fillStyle = '#141824';
+        ctx.fillRect(bx, by, 2, 4);
+        ctx.fillStyle = bf.colors[0];
+        if (flap) {
+          ctx.fillRect(bx - 4, by - 2, 4, 4);
+          ctx.fillRect(bx + 2, by - 2, 4, 4);
+          ctx.fillStyle = bf.colors[1];
+          ctx.fillRect(bx - 3, by + 2, 3, 2);
+          ctx.fillRect(bx + 2, by + 2, 3, 2);
+        } else {
+          ctx.fillRect(bx - 2, by - 1, 2, 4);
+          ctx.fillRect(bx + 2, by - 1, 2, 4);
+        }
+      }
+
+      ctx.restore();
+    }
+
     render() {
       const ctx = this.ctx;
+      const S = FB.HI_RES_SCALE || 2;
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       const area = this.room ? this.room.area : 'overworld';
       ctx.fillStyle =
         area === 'dungeon'
-          ? '#23314d'
+          ? '#1c2840'
           : area === 'frost'
-            ? '#10283d'
+            ? '#0e263d'
             : area === 'darkworld'
-              ? '#261b30'
-              : '#1f5e2c';
-      ctx.fillRect(0, 0, FB.VIEW_W, FB.VIEW_H);
+              ? '#241733'
+              : area === 'shop'
+                ? '#52331b'
+                : '#1b5929';
+      ctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
 
-      // Integer-snapped screen shake so tiles never show subpixel grid seams
+      // Integer-snapped Hi-Bit screen shake so tiles never show subpixel grid seams
       if (this.screenShake > 0.2) {
-        const sx = Math.round((Math.random() - 0.5) * this.screenShake);
-        const sy = Math.round((Math.random() - 0.5) * this.screenShake);
+        const sx = Math.round((Math.random() - 0.5) * this.screenShake * S);
+        const sy = Math.round((Math.random() - 0.5) * this.screenShake * S);
         ctx.translate(sx, sy);
       }
 
-      // 1. Render Tile Map
-      if (this.room) {
-        for (let r = 0; r < FB.ROOM_ROWS; r++) {
-          for (let c = 0; c < FB.ROOM_COLS; c++) {
-            FB.sprites.drawTile(ctx, this.room.grid[r][c], c * TS, r * TS, this.time);
-          }
+      // 1. Pre-Baked Hi-Bit 640x416 Room Terrain (auto-tiles + biome masonry + 2.5D cast shadows)
+      if (this.room && FB.hiTiles) {
+        if (!this.roomCanvas && typeof document !== 'undefined') {
+          this.roomCanvas = document.createElement('canvas');
+          this.roomCanvas.width = FB.RENDER_W;
+          this.roomCanvas.height = FB.RENDER_H;
+          this.roomCtx = this.roomCanvas.getContext('2d');
         }
+        const key = this._computeRoomHash(this.room);
+        if (this.roomCtx && key !== this.roomCacheKey) {
+          FB.hiTiles.bakeRoom(this.roomCtx, this.room);
+          this.roomCacheKey = key;
+        }
+        if (this.roomCanvas) {
+          ctx.drawImage(this.roomCanvas, 0, 0);
+        }
+        // Live animated tile accents (shore ripples, swaying flowers, torch flames, portals, ice glints)
+        FB.hiTiles.drawAnimatedTileAccents(ctx, this.room, this.time);
       }
 
       // 1b. Render Shop Pedestal Goods
@@ -3043,12 +3250,12 @@
         }
       }
 
-      // 2. Render Pickups
+      // 2. Render Pickups (native 640x416)
       for (const item of this.pickups) {
         FB.sprites.drawPickup(ctx, item, this.time);
       }
 
-      // 3. Y-Sorted Entities (Heroes + Clone + Enemies) for authentic 2.5D depth!
+      // 3. Y-Sorted Hi-Bit 32x32 Entities (Heroes + Clone + Biome/Variant Enemies + Bosses)
       const drawables = [];
       for (const h of this.allHeroes) {
         drawables.push({ y: h.y, draw: () => FB.sprites.drawHero(ctx, h, this.time) });
@@ -3061,87 +3268,96 @@
       drawables.sort((a, b) => a.y - b.y);
       for (const d of drawables) d.draw();
 
-      // 4. Render Projectiles
+      // 4. Render Hi-Bit Projectiles
       for (const p of this.projectiles) {
         this.renderProjectile(ctx, p);
       }
 
-      // 5. Render Rich Shaped Particles & Floating Text
+      // 5. Render Rich Shaped Particles & Floating Text (640x416)
       for (const pt of this.particles) {
         const ratio = Math.max(0, pt.life / pt.maxLife);
+        const px = Math.round(pt.x * S);
+        const py = Math.round(pt.y * S);
+        const sz = pt.size * S;
         ctx.save();
         ctx.globalAlpha = ratio;
         if (pt.shape === 'ring') {
-          const rad = (1 - ratio) * pt.maxRadius + 3;
+          const rad = ((1 - ratio) * pt.maxRadius + 3) * S;
           ctx.strokeStyle = pt.color;
-          ctx.lineWidth = Math.max(1, ratio * 2.5);
+          ctx.lineWidth = Math.max(2, ratio * 4.5);
           ctx.beginPath();
-          ctx.arc(Math.round(pt.x), Math.round(pt.y), rad, 0, Math.PI * 2);
+          ctx.arc(px, py, rad, 0, Math.PI * 2);
           ctx.stroke();
         } else if (pt.shape === 'leaf') {
-          ctx.translate(Math.round(pt.x), Math.round(pt.y));
+          ctx.translate(px, py);
           ctx.rotate(pt.rotation);
+          ctx.fillStyle = '#14381d';
+          ctx.fillRect(-5, -3, 10, 6);
           ctx.fillStyle = pt.color;
-          ctx.fillRect(-2, -1, 4, 2);
+          ctx.fillRect(-4, -2, 8, 4);
           ctx.fillStyle = '#86efac';
-          ctx.fillRect(-1, -1, 2, 1);
+          ctx.fillRect(-2, -2, 4, 2);
         } else if (pt.shape === 'star') {
-          const px = Math.round(pt.x);
-          const py = Math.round(pt.y);
           ctx.fillStyle = pt.color;
-          ctx.fillRect(px - 2, py, 5, 1);
-          ctx.fillRect(px, py - 2, 1, 5);
+          ctx.fillRect(px - 5, py - 1, 11, 2);
+          ctx.fillRect(px - 1, py - 5, 2, 11);
           ctx.fillStyle = '#ffffff';
-          ctx.fillRect(px, py, 1, 1);
+          ctx.fillRect(px - 1, py - 1, 2, 2);
         } else if (pt.shape === 'dust') {
           ctx.fillStyle = pt.color;
           ctx.beginPath();
-          ctx.arc(Math.round(pt.x), Math.round(pt.y), pt.size * (0.6 + (1 - ratio) * 0.6), 0, Math.PI * 2);
+          ctx.arc(px, py, sz * (0.6 + (1 - ratio) * 0.6), 0, Math.PI * 2);
           ctx.fill();
         } else if (pt.shape === 'spark') {
-          ctx.translate(Math.round(pt.x), Math.round(pt.y));
+          ctx.translate(px, py);
           ctx.rotate(pt.rotation);
           ctx.fillStyle = pt.color;
-          ctx.fillRect(-pt.size, -0.75, pt.size * 2, 1.5);
+          ctx.fillRect(-sz, -1.5, sz * 2, 3);
         } else {
           ctx.fillStyle = pt.color;
-          ctx.fillRect(Math.round(pt.x - pt.size / 2), Math.round(pt.y - pt.size / 2), pt.size, pt.size);
+          ctx.fillRect(Math.round(px - sz / 2), Math.round(py - sz / 2), Math.round(sz), Math.round(sz));
         }
         ctx.restore();
       }
       ctx.globalAlpha = 1;
 
-      ctx.font = 'bold 7px monospace';
+      // 5b. Living World Biome Atmosphere (sunbeams, butterflies, snow, twilight spores, lantern glow)
+      this.renderAtmosphere(ctx);
+
+      // 5c. Crisp Hi-Bit Floating Combat / Loot Text
+      ctx.font = 'bold 13px monospace';
       ctx.textAlign = 'center';
       for (const ft of this.floatingTexts) {
+        const fx = Math.round(ft.x * S);
+        const fy = Math.round(ft.y * S);
         ctx.globalAlpha = Math.min(1, ft.life * 2);
         ctx.fillStyle = '#090d16';
-        ctx.fillText(ft.text, Math.round(ft.x) + 1, Math.round(ft.y) + 1);
+        ctx.fillText(ft.text, fx + 2, fy + 2);
         ctx.fillStyle = ft.color;
-        ctx.fillText(ft.text, Math.round(ft.x), Math.round(ft.y));
+        ctx.fillText(ft.text, fx, fy);
       }
       ctx.globalAlpha = 1;
 
-      // 6. Dynamic Darkness & Torch Lighting Pass (Pitch-Black Vault in Frost Spire!)
+      // 6. Hi-Bit 640x416 Dynamic Darkness & Warm Torch Lighting Pass (Pitch-Black Vault!)
       if (this.room && this.room.isDark && !this.room.puzzleSolved) {
         if (!this.darkCanvas && typeof document !== 'undefined') {
           this.darkCanvas = document.createElement('canvas');
-          this.darkCanvas.width = FB.VIEW_W;
-          this.darkCanvas.height = FB.VIEW_H;
+          this.darkCanvas.width = FB.RENDER_W;
+          this.darkCanvas.height = FB.RENDER_H;
           this.darkCtx = this.darkCanvas.getContext('2d');
         }
         if (this.darkCtx) {
           const dctx = this.darkCtx;
           dctx.globalCompositeOperation = 'source-over';
-          dctx.clearRect(0, 0, FB.VIEW_W, FB.VIEW_H);
-          dctx.fillStyle = 'rgba(4, 7, 18, 0.90)';
-          dctx.fillRect(0, 0, FB.VIEW_W, FB.VIEW_H);
+          dctx.clearRect(0, 0, FB.RENDER_W, FB.RENDER_H);
+          dctx.fillStyle = 'rgba(4, 7, 18, 0.91)';
+          dctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
 
           dctx.globalCompositeOperation = 'destination-out';
           const punchLight = (lx, ly, rad) => {
             const g = dctx.createRadialGradient(lx, ly, rad * 0.18, lx, ly, rad);
             g.addColorStop(0, 'rgba(0, 0, 0, 1)');
-            g.addColorStop(0.68, 'rgba(0, 0, 0, 0.72)');
+            g.addColorStop(0.68, 'rgba(0, 0, 0, 0.75)');
             g.addColorStop(1, 'rgba(0, 0, 0, 0)');
             dctx.fillStyle = g;
             dctx.beginPath();
@@ -3149,20 +3365,20 @@
             dctx.fill();
           };
 
-          const flicker = Math.sin(this.time * 12) * 2.5;
+          const flicker = Math.sin(this.time * 12) * 5;
           for (const h of this.allHeroes) {
-            if (!h.downed) punchLight(Math.round(h.x), Math.round(h.y), 48 + flicker * 0.5);
+            if (!h.downed) punchLight(Math.round(h.x * S), Math.round(h.y * S), 96 + flicker * 0.5);
           }
           for (let r = 0; r < FB.ROOM_ROWS; r++) {
             for (let c = 0; c < FB.ROOM_COLS; c++) {
               if (this.room.grid[r][c] === T.TORCH_LIT) {
-                punchLight(c * TS + 8, r * TS + 8, 62 + flicker);
+                punchLight(c * 32 + 16, r * 32 + 16, 126 + flicker);
               }
             }
           }
           for (const p of this.projectiles) {
             if (p.kind === 'fireball' || p.kind === 'beam') {
-              punchLight(Math.round(p.x), Math.round(p.y), 38);
+              punchLight(Math.round(p.x * S), Math.round(p.y * S), 78);
             }
           }
           dctx.globalCompositeOperation = 'source-over';
@@ -3171,12 +3387,12 @@
       } else if (this.room && (area === 'dungeon' || area === 'frost' || area === 'darkworld')) {
         // Subtle atmospheric dungeon / spire / twilight vignette
         const grad = ctx.createRadialGradient(
-          FB.VIEW_W / 2,
-          FB.VIEW_H / 2,
-          FB.VIEW_H * 0.35,
-          FB.VIEW_W / 2,
-          FB.VIEW_H / 2,
-          FB.VIEW_W * 0.65
+          FB.RENDER_W / 2,
+          FB.RENDER_H / 2,
+          FB.RENDER_H * 0.36,
+          FB.RENDER_W / 2,
+          FB.RENDER_H / 2,
+          FB.RENDER_W * 0.65
         );
         grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
         grad.addColorStop(
@@ -3188,141 +3404,198 @@
               : 'rgba(6, 10, 20, 0.36)'
         );
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, FB.VIEW_W, FB.VIEW_H);
+        ctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
       }
 
       // Room transition fade
       if (this.transitionOverlayAlpha > 0) {
         ctx.fillStyle = `rgba(8, 11, 20, ${this.transitionOverlayAlpha})`;
-        ctx.fillRect(0, 0, FB.VIEW_W, FB.VIEW_H);
+        ctx.fillRect(0, 0, FB.RENDER_W, FB.RENDER_H);
       }
 
       ctx.restore();
     }
 
     renderProjectile(ctx, p) {
+      const S = FB.HI_RES_SCALE || 2;
+      const px = Math.round(p.x * S);
+      const py = Math.round(p.y * S);
       ctx.save();
-      ctx.translate(Math.round(p.x), Math.round(p.y));
+      ctx.translate(px, py);
 
       if (p.kind === 'boomerang') {
         ctx.rotate(p.angle);
+        ctx.fillStyle = '#141824';
+        ctx.fillRect(-11, -5, 22, 8);
+        ctx.fillRect(-5, -11, 8, 22);
         ctx.fillStyle = '#38bdf8';
-        ctx.fillRect(-5, -2, 10, 3);
-        ctx.fillRect(-2, -5, 3, 10);
+        ctx.fillRect(-10, -4, 20, 6);
+        ctx.fillRect(-4, -10, 6, 20);
         ctx.fillStyle = '#facc15';
-        ctx.fillRect(-1, -1, 3, 3);
+        ctx.fillRect(-2, -2, 5, 5);
       } else if (p.kind === 'bomb') {
         const urgent = p.life < 0.45 && Math.floor(this.time * 22) % 2 === 0;
+        ctx.fillStyle = '#141824';
+        ctx.beginPath();
+        ctx.arc(0, 2, 11.5, 0, Math.PI * 2);
+        ctx.fill();
         ctx.fillStyle = urgent ? '#ef4444' : '#312e81';
         ctx.beginPath();
-        ctx.arc(0, 1, 5, 0, Math.PI * 2);
+        ctx.arc(0, 2, 9.5, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = urgent ? '#fca5a5' : '#818cf8';
+        ctx.fillRect(-5, -3, 4, 4);
         ctx.fillStyle = '#94a3b8';
-        ctx.fillRect(-2, -5, 4, 2);
+        ctx.fillRect(-4, -10, 8, 4);
         ctx.fillStyle = '#facc15';
-        ctx.fillRect(0, -7, 2, 2);
+        ctx.fillRect(0, -14, 4, 4);
       } else if (p.kind === 'arrow') {
         const ang = Math.atan2(p.vy, p.vx);
         ctx.rotate(ang);
+        ctx.fillStyle = '#141824';
+        ctx.fillRect(-14, -4, 26, 8);
         ctx.fillStyle = '#d4a359';
-        ctx.fillRect(-6, -1, 10, 2);
-        ctx.fillStyle = '#e2e8f0';
-        ctx.fillRect(3, -2, 3, 4);
+        ctx.fillRect(-12, -2, 20, 4);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(6, -4, 6, 8);
         ctx.fillStyle = '#ef4444';
-        ctx.fillRect(-7, -2, 3, 4);
+        ctx.fillRect(-14, -4, 6, 8);
       } else if (p.kind === 'fireball') {
-        ctx.fillStyle = '#f97316';
+        ctx.fillStyle = 'rgba(249, 115, 22, 0.35)';
         ctx.beginPath();
-        ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.arc(0, 0, 15, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#fef08a';
+        ctx.fillStyle = '#ea580c';
         ctx.beginPath();
-        ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.arc(0, 0, 6.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(-1, -1, 3, 0, Math.PI * 2);
         ctx.fill();
       } else if (p.kind === 'rock') {
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(0, 0, 8.5, 0, Math.PI * 2);
+        ctx.fill();
         ctx.fillStyle = '#9ca3af';
         ctx.beginPath();
-        ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+        ctx.arc(0, 0, 7, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#4b5563';
-        ctx.fillRect(-1, 0, 3, 2);
+        ctx.fillRect(-2, 1, 6, 4);
+        ctx.fillStyle = '#e5e7eb';
+        ctx.fillRect(-4, -4, 3, 2);
       } else if (p.kind === 'bone') {
         ctx.rotate(p.angle);
+        ctx.fillStyle = '#141824';
+        ctx.fillRect(-11, -5, 22, 10);
         ctx.fillStyle = '#f8fafc';
-        ctx.fillRect(-4, -1, 8, 2);
-        ctx.fillRect(-5, -2, 2, 4);
-        ctx.fillRect(3, -2, 2, 4);
+        ctx.fillRect(-8, -2, 16, 4);
+        ctx.fillRect(-10, -4, 4, 8);
+        ctx.fillRect(6, -4, 4, 8);
       } else if (p.kind === 'dark_orb') {
-        ctx.fillStyle = '#4c1d95';
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.32)';
         ctx.beginPath();
-        ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.arc(0, 0, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#2e1065';
+        ctx.beginPath();
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#f43f5e';
         ctx.beginPath();
-        ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+        ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = '#fef08a';
+        ctx.fillRect(-2, -2, 3, 3);
       } else if (p.kind === 'ice_shard') {
         const ang = Math.atan2(p.vy, p.vx);
         ctx.rotate(ang);
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
-        ctx.fillRect(-7, -3, 14, 6);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.40)';
+        ctx.fillRect(-14, -6, 28, 12);
+        ctx.fillStyle = '#071b2e';
+        ctx.beginPath();
+        ctx.moveTo(16, 0);
+        ctx.lineTo(0, -8);
+        ctx.lineTo(-14, 0);
+        ctx.lineTo(0, 8);
+        ctx.closePath();
+        ctx.fill();
         ctx.fillStyle = '#38bdf8';
         ctx.beginPath();
-        ctx.moveTo(7, 0);
-        ctx.lineTo(0, -3.5);
-        ctx.lineTo(-6, 0);
-        ctx.lineTo(0, 3.5);
+        ctx.moveTo(14, 0);
+        ctx.lineTo(0, -6);
+        ctx.lineTo(-12, 0);
+        ctx.lineTo(0, 6);
         ctx.closePath();
         ctx.fill();
         ctx.fillStyle = '#f0f9ff';
-        ctx.fillRect(-3, -1, 7, 2);
+        ctx.fillRect(-5, -2, 13, 3);
       } else if (p.kind === 'beam') {
         const ang = Math.atan2(p.vy, p.vx);
         ctx.rotate(ang);
-        ctx.fillStyle = 'rgba(253, 224, 71, 0.45)';
-        ctx.fillRect(-10, -4, 18, 8);
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.42)';
+        ctx.fillRect(-20, -8, 36, 16);
         ctx.fillStyle = '#fde047';
-        ctx.fillRect(-8, -2, 16, 4);
+        ctx.fillRect(-16, -4, 32, 8);
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-5, -1, 13, 2);
+        ctx.fillRect(-10, -2, 24, 4);
       } else if (p.kind === 'thrown_pot') {
         ctx.rotate(p.angle * 0.5);
+        ctx.fillStyle = '#24140b';
+        ctx.fillRect(-9, -9, 18, 18);
         ctx.fillStyle = '#9e6238';
-        ctx.fillRect(-4, -4, 8, 8);
-        ctx.fillStyle = '#d49461';
-        ctx.fillRect(-3, -3, 4, 3);
+        ctx.fillRect(-8, -8, 16, 16);
+        ctx.fillStyle = '#e0a470';
+        ctx.fillRect(-6, -6, 7, 5);
       } else if (p.kind === 'hookshot') {
-        // Draw linked chain back to owner in world coords!
+        // Draw crisp Hi-Bit metallic chain links back to owner!
         ctx.restore();
         ctx.save();
         if (p.owner) {
-          const dx = p.x - p.owner.x;
-          const dy = p.y - p.owner.y;
+          const ox = p.owner.x * S;
+          const oy = p.owner.y * S;
+          const dx = px - ox;
+          const dy = py - oy;
           const dist = Math.hypot(dx, dy) || 1;
-          const links = Math.max(2, Math.floor(dist / 6));
-          ctx.strokeStyle = '#64748b';
-          ctx.lineWidth = 1.5;
+          const links = Math.max(2, Math.floor(dist / 11));
+          ctx.strokeStyle = '#1e293b';
+          ctx.lineWidth = 4.5;
           ctx.beginPath();
-          ctx.moveTo(Math.round(p.owner.x), Math.round(p.owner.y));
-          ctx.lineTo(Math.round(p.x), Math.round(p.y));
+          ctx.moveTo(Math.round(ox), Math.round(oy));
+          ctx.lineTo(px, py);
           ctx.stroke();
-          ctx.fillStyle = '#cbd5e1';
+          ctx.strokeStyle = '#94a3b8';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(Math.round(ox), Math.round(oy));
+          ctx.lineTo(px, py);
+          ctx.stroke();
           for (let i = 1; i < links; i++) {
-            const lx = p.owner.x + (dx * i) / links;
-            const ly = p.owner.y + (dy * i) / links;
-            ctx.fillRect(Math.round(lx) - 1, Math.round(ly) - 1, 2, 2);
+            const lx = Math.round(ox + (dx * i) / links);
+            const ly = Math.round(oy + (dy * i) / links);
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(lx - 3, ly - 3, 6, 6);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(lx - 2, ly - 2, 4, 4);
           }
         }
-        // Claw head
         const ang = Math.atan2(p.vy || (p.owner ? p.y - p.owner.y : 0), p.vx || (p.owner ? p.x - p.owner.x : 1));
-        ctx.translate(Math.round(p.x), Math.round(p.y));
+        ctx.translate(px, py);
         ctx.rotate(ang);
+        ctx.fillStyle = '#141824';
+        ctx.fillRect(-7, -9, 16, 18);
         ctx.fillStyle = '#e2e8f0';
-        ctx.fillRect(-3, -4, 5, 2);
-        ctx.fillRect(-3, 2, 5, 2);
-        ctx.fillRect(0, -3, 4, 6);
+        ctx.fillRect(-6, -8, 10, 4);
+        ctx.fillRect(-6, 4, 10, 4);
+        ctx.fillRect(0, -6, 8, 12);
         ctx.fillStyle = '#fde047';
-        ctx.fillRect(-2, -1, 3, 2);
+        ctx.fillRect(-4, -2, 6, 4);
       }
 
       ctx.restore();

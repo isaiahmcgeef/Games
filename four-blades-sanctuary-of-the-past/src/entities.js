@@ -168,9 +168,11 @@
   }
 
   class Enemy {
-    constructor(type, x, y, playerCount = 1) {
+    constructor(type, x, y, playerCount = 1, biome = 'overworld') {
       this.id = Math.random().toString(36).slice(2);
       this.type = type;
+      this.biome = biome;
+      this.variant = Math.floor(Math.random() * 4);
       this.x = x;
       this.y = y;
       this.w = 14;

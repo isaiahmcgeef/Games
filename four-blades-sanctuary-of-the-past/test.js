@@ -22,6 +22,7 @@ function assert(cond, msg) {
 const scriptOrder = [
   'constants.js',
   'audio.js',
+  'tiles-hibit.js',
   'sprites.js',
   'input.js',
   'saves.js',
@@ -62,6 +63,7 @@ const makeCtx = () => ({
   rotate() {},
   beginPath() {},
   arc() {},
+  ellipse() {},
   moveTo() {},
   lineTo() {},
   closePath() {},
@@ -403,11 +405,33 @@ for (let i = 0; i < 60; i++) {
 assert(!g.pickups.some((p) => p.kind === 'heart'), 'Hero Mode disables free heart drops from bushes/pots');
 console.log('[PASS] Phase 4: Frost Spire, Ice Blocks, Dynamic Darkness, Cryo-Wyrm Boss, Grand Victory & Hero Mode');
 
-// 10. Visit & render every room in the world
+// 10. Test Hi-Bit 32x32 Graphics Overhaul (640x416, room terrain cache, enemy variability, biome atmosphere)
+assert(FB.RENDER_W === 640 && FB.RENDER_H === 416, 'Hi-Bit render dimensions 640x416');
+assert(g.canvas.width === 640 && g.canvas.height === 416, 'Game canvas sized 640x416');
+
+g.enterRoom('ow_start', { col: 10, row: 7 });
+g.render();
+assert(!!g.roomCanvas && g.roomCanvas.width === 640 && g.roomCanvas.height === 416, 'Pre-baked Hi-Bit roomCanvas 640x416');
+assert(g.butterflies.length >= 2 && g.ambientMotes.length >= 10, 'Overworld butterflies and sunlit pollen active');
+const cacheBefore = g.roomCacheKey;
+g.room.grid[4][4] = T.GRASS_FLOWERS;
+g.render();
+assert(g.roomCacheKey !== cacheBefore, 'Room cache key invalidates and re-bakes automatically on tile mutation');
+
+g.enterRoom('fs_entry', { col: 10, row: 7 });
+assert(g.ambientMotes.length >= 20, 'Frost Spire falling pixel snow active');
+assert(g.enemies.every((e) => e.biome === 'frost' && e.variant >= 0 && e.variant <= 3), 'Frost Spire enemies carry frost biome & visual variant');
+
+g.enterRoom('dw_start', { col: 10, row: 7 });
+assert(g.ambientMotes.length >= 15, 'Dark World twilight spores active');
+assert(g.enemies.every((e) => e.biome === 'darkworld'), 'Dark World enemies carry darkworld biome');
+console.log('[PASS] Hi-Bit 32x32 Graphics: 640x416 room cache, auto-invalidation, biome enemies & ambient weather');
+
+// 11. Visit & render every room in the world at Hi-Bit 640x416
 for (const id of Object.keys(g.rooms)) {
   g.enterRoom(id, { col: 10, row: 7 });
   g.update(0.02);
   g.render();
 }
-console.log(`[PASS] Full world render & update simulation (${Object.keys(g.rooms).length} rooms)`);
+console.log(`[PASS] Full world render & update simulation (${Object.keys(g.rooms).length} rooms @ 640x416)`);
 console.log('\nALL TESTS PASSED!');

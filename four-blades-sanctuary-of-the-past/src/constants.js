@@ -10,9 +10,13 @@
   FB.TILE_SIZE = 16;
   FB.ROOM_COLS = 20;
   FB.ROOM_ROWS = 13;
-  FB.VIEW_W = FB.ROOM_COLS * FB.TILE_SIZE; // 320
-  FB.VIEW_H = FB.ROOM_ROWS * FB.TILE_SIZE; // 208
-  FB.SCALE = 3; // Crisp 3x pixel scaling -> 960x624 internal canvas
+  FB.VIEW_W = FB.ROOM_COLS * FB.TILE_SIZE; // 320 logical units
+  FB.VIEW_H = FB.ROOM_ROWS * FB.TILE_SIZE; // 208 logical units
+  FB.HI_RES_SCALE = 2; // Hi-Bit 32x32 pixel art per tile!
+  FB.HI_TILE = FB.TILE_SIZE * FB.HI_RES_SCALE; // 32
+  FB.RENDER_W = FB.VIEW_W * FB.HI_RES_SCALE; // 640
+  FB.RENDER_H = FB.VIEW_H * FB.HI_RES_SCALE; // 416
+  FB.SCALE = 3;
 
   FB.DIRS = {
     DOWN: 0,
