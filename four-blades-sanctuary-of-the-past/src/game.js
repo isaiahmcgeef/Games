@@ -51,6 +51,8 @@
       this.activeDialog = null;
       this.dialogTimer = 0;
       this.hudTick = 0;
+      this.darkCanvas = null;
+      this.darkCtx = null;
       this.lastFrameTime = performance.now();
     }
 
@@ -383,10 +385,13 @@
         }
       }
 
-      // Spawn enemies unless boss defeated or combat puzzle already cleared
+      // Spawn enemies unless this room's boss is defeated or combat puzzle already cleared
+      const roomBossDefeated =
+        (room.id === 'dg_boss' && this.bossDefeated) ||
+        (room.id === 'fs_boss' && this.frostBossDefeated);
       const shouldSpawnEnemies =
         room.enemies &&
-        !(room.isBossRoom && this.bossDefeated) &&
+        !roomBossDefeated &&
         !(room.puzzle && room.puzzle.type === 'defeat_all' && room.puzzleSolved);
 
       if (shouldSpawnEnemies) {
@@ -752,6 +757,28 @@
           } else {
             hero.dir = inp.dy < 0 ? FB.DIRS.UP : FB.DIRS.DOWN;
           }
+        }
+
+        // Slippery Ice Floor momentum glide!
+        const underCol = Math.floor(hero.x / TS);
+        const underRow = Math.floor(hero.y / TS);
+        const onIce = this.room?.grid[underRow]?.[underCol] === T.ICE_FLOOR;
+        if (onIce && !hero.hookZipping) {
+          const blend = Math.min(1, dt * (inp.dx !== 0 || inp.dy !== 0 ? 3.8 : 2.1));
+          hero.iceVx += (vx - hero.iceVx) * blend;
+          hero.iceVy += (vy - hero.iceVy) * blend;
+          if (Math.hypot(hero.iceVx, hero.iceVy) < 3 && inp.dx === 0 && inp.dy === 0) {
+            hero.iceVx = 0;
+            hero.iceVy = 0;
+          }
+          vx = hero.iceVx;
+          vy = hero.iceVy;
+          if (Math.hypot(vx, vy) > 25 && Math.random() < 0.18) {
+            this.spawnParticles(hero.x, hero.y + 5, '#bae6fd', 1, 16, { shape: 'dust', life: 0.18, size: 1.6 });
+          }
+        } else {
+          hero.iceVx = vx;
+          hero.iceVy = vy;
         }
       }
 
@@ -1249,6 +1276,12 @@
       } else if (reward === 'boss_key') {
         this.hasBossKey = true;
         rewardColor = '#f59e0b';
+      } else if (reward === 'frost_small_key') {
+        this.frostSmallKeys += 1;
+        rewardColor = '#38bdf8';
+      } else if (reward === 'frost_boss_key') {
+        this.hasFrostBossKey = true;
+        rewardColor = '#38bdf8';
       } else if (reward === 'heart_container') {
         rewardColor = '#ef4444';
         for (const h of this.humanHeroes) {
@@ -1517,43 +1550,65 @@
       if (col < 0 || col >= FB.ROOM_COLS || row < 0 || row >= FB.ROOM_ROWS) return;
       const tile = this.room.grid[row][col];
 
-      // Unlock Small Locked Door
+      // Unlock Small Locked Door (Palace #1 or Frost Spire)
       if (tile === T.DOOR_LOCKED) {
-        if (this.smallKeys > 0) {
-          const dir = this._doorDirForTile(col, row);
-          const lock = this.room.locks?.[dir];
-          this.smallKeys -= 1;
+        const dir = this._doorDirForTile(col, row);
+        const lock = this.room.locks?.[dir];
+        const isFrost = lock?.type === 'frost_small' || this.room.area === 'frost';
+        const avail = isFrost ? this.frostSmallKeys : this.smallKeys;
+        if (avail > 0) {
+          if (isFrost) this.frostSmallKeys -= 1;
+          else this.smallKeys -= 1;
           if (lock) this.unlockedLocks.add(lock.id);
           this._openDoorTiles(this.room, dir);
           FB.audio.play('door');
-          this.spawnParticles(col * TS + 8, row * TS + 8, '#facc15', 12);
-          this.showToast('Unlocked Palace Door!', 2.2);
+          this.spawnParticles(col * TS + 8, row * TS + 8, isFrost ? '#38bdf8' : '#facc15', 12);
+          this.showToast(isFrost ? 'Unlocked Frost Spire Seal!' : 'Unlocked Palace Door!', 2.2);
+          this.saveProgress();
           FB.ui.renderHUD(this);
         } else {
-          this.showToast('Locked! Find a Small Key in the dungeon chambers.', 2.0);
+          this.showToast(
+            isFrost
+              ? 'Sealed in ice! Find a Frost Key in the western glacier.'
+              : 'Locked! Find a Small Key in the dungeon chambers.',
+            2.0
+          );
         }
         return;
       }
 
-      // Unlock Boss Door
+      // Unlock Boss Door (Palace #1 or Frost Spire)
       if (tile === T.DOOR_BOSS) {
-        if (this.hasBossKey) {
-          const dir = this._doorDirForTile(col, row);
-          const lock = this.room.locks?.[dir];
+        const dir = this._doorDirForTile(col, row);
+        const lock = this.room.locks?.[dir];
+        const isFrost = lock?.type === 'frost_boss' || this.room.area === 'frost';
+        const hasKey = isFrost ? this.hasFrostBossKey : this.hasBossKey;
+        if (hasKey) {
           if (lock) this.unlockedLocks.add(lock.id);
           this._openDoorTiles(this.room, dir);
           FB.audio.play('door');
           this.screenShake = 4;
-          this.spawnParticles(col * TS + 8, row * TS + 8, '#fde047', 18);
-          this.showToast('The Boss Door opens! Prepare for battle!', 2.8);
+          this.spawnParticles(col * TS + 8, row * TS + 8, isFrost ? '#38bdf8' : '#fde047', 18);
+          this.showToast(
+            isFrost
+              ? 'The Frost Crown Gate shatters open! Glacior awaits!'
+              : 'The Boss Door opens! Prepare for battle!',
+            2.8
+          );
+          this.saveProgress();
           FB.ui.renderHUD(this);
         } else {
-          this.showToast('Sealed by the Sovereign! Find the BOSS KEY in the eastern wing.', 2.5);
+          this.showToast(
+            isFrost
+              ? 'Sealed by Frost Sovereign Glacior! Claim the FROST BOSS KEY in the eastern hall.'
+              : 'Sealed by the Sovereign! Find the BOSS KEY in the eastern wing.',
+            2.5
+          );
         }
         return;
       }
 
-      // Pushable Block!
+      // Pushable Block (slides across consecutive ICE_FLOOR tiles in Frost Spire!)
       if (tile === T.BLOCK_PUSH && !hero.isClone) {
         const key = `${col},${row}`;
         if (hero.pushTileKey !== key) {
@@ -1567,17 +1622,53 @@
           const tr = row + dirY;
           if (tc > 0 && tc < FB.ROOM_COLS - 1 && tr > 0 && tr < FB.ROOM_ROWS - 1) {
             const dest = this.room.grid[tr][tc];
-            if (dest === T.DUNGEON_FLOOR || dest === T.SWITCH_FLOOR || dest === T.DUNGEON_CARPET) {
-              // Restore floor under old block
-              this.room.grid[row][col] = T.DUNGEON_FLOOR;
-              // If pushed onto switch, mark tile as BLOCK_PUSH AND remember switch underneath
-              if (dest === T.SWITCH_FLOOR) {
-                this.room.grid[tr][tc] = T.SWITCH_FLOOR_ON;
+            if (
+              dest === T.DUNGEON_FLOOR ||
+              dest === T.SWITCH_FLOOR ||
+              dest === T.DUNGEON_CARPET ||
+              dest === T.ICE_FLOOR
+            ) {
+              // Restore floor under old block (preserve ice floor in Frost Spire!)
+              const neighborIce =
+                this.room.grid[row - 1]?.[col] === T.ICE_FLOOR ||
+                this.room.grid[row + 1]?.[col] === T.ICE_FLOOR ||
+                this.room.grid[row]?.[col - 1] === T.ICE_FLOOR ||
+                this.room.grid[row]?.[col + 1] === T.ICE_FLOOR;
+              this.room.grid[row][col] = neighborIce ? T.ICE_FLOOR : T.DUNGEON_FLOOR;
+
+              let finalC = tc;
+              let finalR = tr;
+              let hitSwitch = dest === T.SWITCH_FLOOR;
+
+              // Slide straight across consecutive ice tiles until hitting a switch or obstacle!
+              if (dest === T.ICE_FLOOR) {
+                while (true) {
+                  const nc = finalC + dirX;
+                  const nr = finalR + dirY;
+                  if (nc <= 0 || nc >= FB.ROOM_COLS - 1 || nr <= 0 || nr >= FB.ROOM_ROWS - 1) break;
+                  const nextTile = this.room.grid[nr][nc];
+                  if (nextTile === T.SWITCH_FLOOR) {
+                    finalC = nc;
+                    finalR = nr;
+                    hitSwitch = true;
+                    break;
+                  } else if (nextTile === T.ICE_FLOOR) {
+                    finalC = nc;
+                    finalR = nr;
+                  } else {
+                    break;
+                  }
+                }
+                this.spawnParticles(finalC * TS + 8, finalR * TS + 8, '#bae6fd', 10, 55, { shape: 'dust' });
+              }
+
+              if (hitSwitch) {
+                this.room.grid[finalR][finalC] = T.SWITCH_FLOOR_ON;
                 FB.audio.play('switch');
-                this.spawnParticles(tc * TS + 8, tr * TS + 8, '#4ade80', 10);
-                this.addFloatingText(tc * TS + 8, tr * TS, 'LOCKED!', '#4ade80');
+                this.spawnParticles(finalC * TS + 8, finalR * TS + 8, '#4ade80', 10);
+                this.addFloatingText(finalC * TS + 8, finalR * TS, 'LOCKED!', '#4ade80');
               } else {
-                this.room.grid[tr][tc] = T.BLOCK_PUSH;
+                this.room.grid[finalR][finalC] = T.BLOCK_PUSH;
                 FB.audio.play('door');
               }
             }
@@ -1870,7 +1961,7 @@
       }
       const r = Math.random();
       if (r < 0.35) this.spawnPickup('rupee_green', x, y);
-      else if (r < 0.5) this.spawnPickup('heart', x, y);
+      else if (r < 0.5 && !this.heroMode) this.spawnPickup('heart', x, y);
       else if (r < 0.58) this.spawnPickup('rupee_blue', x, y);
     }
 
@@ -1920,6 +2011,8 @@
 
         if (e.type === 'boss') {
           this.updateBoss(e, target, dt);
+        } else if (e.type === 'frost_boss') {
+          this.updateFrostBoss(e, target, dt);
         } else if (e.knockTimer > 0) {
           e.knockTimer -= dt;
           this.moveEnemy(e, e.knockX * dt, e.knockY * dt);
@@ -1931,32 +2024,57 @@
         const hitDist = e.lungeTimer > 0 ? (e.w + 15) * 0.5 : (e.w + 10) * 0.45;
         for (const h of liveHeroes) {
           if (Math.hypot(h.x - e.x, h.y - e.y) < hitDist) {
-            // If hero is mid-swing facing the lunging armed enemy, trigger auto-parry instead of unfair trade!
+            // If hero is mid-swing facing a lunging armed enemy, trigger auto-parry instead of unfair trade!
             if (e.armed && e.lungeTimer > 0 && h.swordTimer > 0) {
               this.checkSwordHits(h, false);
               if (e.stunTimer > 0) continue;
             }
+            // Sword parry interrupt on charging Cryo-Wyrm!
+            if (e.type === 'frost_boss' && e.bossState === 'charge' && (h.swordTimer > 0 || h.spinTimer > 0)) {
+              e.bossState = 'weave';
+              e.stateTimer = 1.6;
+              e.stunTimer = 1.1;
+              h.invuln = Math.max(h.invuln, 0.35);
+              FB.audio.play('parry');
+              this.hitstop = Math.max(this.hitstop, 0.06);
+              this.spawnRing(e.x, e.y, '#7dd3fc', 24, 0.25);
+              this.addFloatingText(e.x, e.y - 12, 'PARRY!', '#fde047');
+              continue;
+            }
             h.damage(e.damage, e.x, e.y, this);
+          }
+        }
+
+        // Cryo-Wyrm trailing crystalline coils contact check
+        if (e.type === 'frost_boss' && e.segments) {
+          for (const seg of e.segments) {
+            for (const h of liveHeroes) {
+              if (!h.downed && Math.hypot(h.x - seg.x, h.y - seg.y) < (seg.r || 7) + 4) {
+                h.damage(1, seg.x, seg.y, this);
+              }
+            }
           }
         }
       }
     }
 
     updateNormalEnemy(e, target, dist, dt) {
+      const hmSpd = this.heroMode ? 1.2 : 1.0;
+      const hmCadence = this.heroMode ? 0.8 : 1.0;
       e.aiTimer -= dt;
       e.shootTimer -= dt;
 
       if (e.type === 'octorok') {
         if (e.aiTimer <= 0) {
           e.dir = Math.floor(Math.random() * 4);
-          e.aiTimer = 1.1 + Math.random() * 1.0;
+          e.aiTimer = (1.1 + Math.random() * 1.0) * hmCadence;
         }
         const dv = FB.DIR_VEC[e.dir];
-        if (!this.moveEnemy(e, dv.x * e.speed * dt, dv.y * e.speed * dt)) {
+        if (!this.moveEnemy(e, dv.x * e.speed * hmSpd * dt, dv.y * e.speed * hmSpd * dt)) {
           e.dir = (e.dir + 1) % 4;
         }
         if (e.shootTimer <= 0 && dist < 170) {
-          e.shootTimer = 2.0 + Math.random() * 1.1;
+          e.shootTimer = (2.0 + Math.random() * 1.1) * hmCadence;
           // Face nearest axis toward player and spit rock
           if (Math.abs(target.x - e.x) > Math.abs(target.y - e.y)) {
             e.dir = target.x < e.x ? FB.DIRS.LEFT : FB.DIRS.RIGHT;
@@ -1969,8 +2087,8 @@
               kind: 'rock',
               x: e.x + sv.x * 8,
               y: e.y + sv.y * 8,
-              vx: sv.x * 115,
-              vy: sv.y * 115,
+              vx: sv.x * 115 * hmSpd,
+              vy: sv.y * 115 * hmSpd,
               fromEnemy: true,
               damage: 1,
               life: 1.8,
@@ -1980,7 +2098,7 @@
         }
       } else if (e.type === 'keese') {
         const ang = Math.atan2(target.y - e.y, target.x - e.x) + Math.sin(this.time * 5 + e.x) * 0.8;
-        this.moveEnemy(e, Math.cos(ang) * e.speed * dt, Math.sin(ang) * e.speed * dt);
+        this.moveEnemy(e, Math.cos(ang) * e.speed * hmSpd * dt, Math.sin(ang) * e.speed * hmSpd * dt);
       } else {
         // Armed melee enemies (Soldier, Red Soldier, Stalfos, Armored Knight):
         // Telegraph windup -> sharp weapon lunge (can be Parried!)
@@ -1994,7 +2112,7 @@
           }
           if (e.telegraphTimer <= 0) {
             e.lungeTimer = 0.2;
-            e.attackCooldown = e.type === 'red_soldier' ? 1.15 : 1.45;
+            e.attackCooldown = (e.type === 'red_soldier' ? 1.15 : 1.45) * hmCadence;
             FB.audio.play('sword');
           }
           return;
@@ -2003,15 +2121,15 @@
         if (e.armed && e.lungeTimer > 0) {
           e.lungeTimer -= dt;
           const dv = FB.DIR_VEC[e.dir] || FB.DIR_VEC[0];
-          const lungeSpd = e.speed * 2.15;
+          const lungeSpd = e.speed * 2.15 * hmSpd;
           this.moveEnemy(e, dv.x * lungeSpd * dt, dv.y * lungeSpd * dt);
           return;
         }
 
         if (dist < 135) {
           const ang = Math.atan2(target.y - e.y, target.x - e.x);
-          const vx = Math.cos(ang) * e.speed;
-          const vy = Math.sin(ang) * e.speed;
+          const vx = Math.cos(ang) * e.speed * hmSpd;
+          const vy = Math.sin(ang) * e.speed * hmSpd;
           if (Math.abs(vx) > Math.abs(vy)) {
             e.dir = vx < 0 ? FB.DIRS.LEFT : FB.DIRS.RIGHT;
           } else {
@@ -2020,7 +2138,7 @@
 
           // Initiate parryable weapon telegraph when close!
           if (e.armed && dist < 38 && e.attackCooldown <= 0) {
-            e.telegraphTimer = 0.36;
+            e.telegraphTimer = 0.36 * hmCadence;
             return;
           }
 
@@ -2028,14 +2146,14 @@
 
           // Stalfos throws bones at mid-range!
           if (e.type === 'stalfos' && dist > 42 && e.shootTimer <= 0) {
-            e.shootTimer = 2.4;
+            e.shootTimer = 2.4 * hmCadence;
             this.projectiles.push(
               new FB.Projectile({
                 kind: 'bone',
                 x: e.x,
                 y: e.y,
-                vx: Math.cos(ang) * 115,
-                vy: Math.sin(ang) * 115,
+                vx: Math.cos(ang) * 115 * hmSpd,
+                vy: Math.sin(ang) * 115 * hmSpd,
                 fromEnemy: true,
                 damage: 2,
                 life: 1.6,
@@ -2049,7 +2167,7 @@
             e.aiTimer = 1.2 + Math.random();
           }
           const dv = FB.DIR_VEC[e.dir];
-          if (!this.moveEnemy(e, dv.x * e.speed * 0.6 * dt, dv.y * e.speed * 0.6 * dt)) {
+          if (!this.moveEnemy(e, dv.x * e.speed * 0.6 * hmSpd * dt, dv.y * e.speed * 0.6 * hmSpd * dt)) {
             e.dir = (e.dir + 2) % 4;
           }
         }
@@ -2115,6 +2233,105 @@
       }
     }
 
+    updateFrostBoss(b, target, dt) {
+      const hmMult = this.heroMode ? 1.15 : 1.0;
+      b.lookAngle = Math.atan2(target.y - b.y, target.x - b.x);
+      b.weavePhase = (b.weavePhase || 0) + dt * (b.phase === 2 ? 3.8 : 2.5);
+      b.stateTimer -= dt;
+
+      if (b.bossState === 'weave') {
+        // Serpentine glide across the glacial crown
+        const baseAng = b.lookAngle + Math.sin(b.weavePhase) * 0.85;
+        const spd = (b.phase === 2 ? 68 : 48) * hmMult;
+        b.x = Math.max(TS * 2.2, Math.min(FB.VIEW_W - TS * 2.2, b.x + Math.cos(baseAng) * spd * dt));
+        b.y = Math.max(TS * 2.2, Math.min(FB.VIEW_H - TS * 2.2, b.y + Math.sin(baseAng) * spd * dt));
+
+        if (b.stateTimer <= 0) {
+          // Fire aimed spread of reflectable Ice Shards, then telegraph a frost charge!
+          const count = b.phase === 2 ? 5 : 3;
+          for (let i = 0; i < count; i++) {
+            const a = b.lookAngle + (i - (count - 1) / 2) * 0.34;
+            const shardSpd = (b.phase === 2 ? 132 : 108) * hmMult;
+            this.projectiles.push(
+              new FB.Projectile({
+                kind: 'ice_shard',
+                x: b.x + Math.cos(a) * 10,
+                y: b.y + Math.sin(a) * 10,
+                vx: Math.cos(a) * shardSpd,
+                vy: Math.sin(a) * shardSpd,
+                fromEnemy: true,
+                damage: 2,
+                life: 2.2,
+                radius: 4.5,
+              })
+            );
+          }
+          FB.audio.play('fire');
+          b.bossState = 'telegraph';
+          b.stateTimer = b.phase === 2 ? 0.42 : 0.52;
+        }
+      } else if (b.bossState === 'telegraph') {
+        // Lock onto player with golden glare before lunging!
+        if (b.stateTimer <= 0) {
+          b.bossState = 'charge';
+          b.stateTimer = 0.72;
+          const chargeSpd = (b.phase === 2 ? 175 : 142) * hmMult;
+          b.dashVx = Math.cos(b.lookAngle) * chargeSpd;
+          b.dashVy = Math.sin(b.lookAngle) * chargeSpd;
+          FB.audio.play('dash');
+          this.spawnRing(b.x, b.y, '#7dd3fc', 24, 0.24);
+        }
+      } else if (b.bossState === 'charge') {
+        b.x = Math.max(TS * 2.0, Math.min(FB.VIEW_W - TS * 2.0, b.x + b.dashVx * dt));
+        b.y = Math.max(TS * 2.0, Math.min(FB.VIEW_H - TS * 2.0, b.y + b.dashVy * dt));
+        if (Math.random() < 0.45) {
+          this.spawnParticles(b.x, b.y, '#bae6fd', 1, 24, { shape: 'dust', life: 0.22, size: 2.4 });
+        }
+        if (b.stateTimer <= 0) {
+          // Phase II radial 8-way blizzard shard burst!
+          if (b.phase === 2) {
+            for (let i = 0; i < 8; i++) {
+              const a = (i * Math.PI) / 4 + b.weavePhase * 0.25;
+              this.projectiles.push(
+                new FB.Projectile({
+                  kind: 'ice_shard',
+                  x: b.x,
+                  y: b.y,
+                  vx: Math.cos(a) * 115 * hmMult,
+                  vy: Math.sin(a) * 115 * hmMult,
+                  fromEnemy: true,
+                  damage: 2,
+                  life: 2.0,
+                  radius: 4.5,
+                })
+              );
+            }
+            this.spawnRing(b.x, b.y, '#38bdf8', 32, 0.3);
+          }
+          b.bossState = 'weave';
+          b.stateTimer = b.phase === 2 ? 1.55 : 2.1;
+        }
+      }
+
+      // Smoothly slither trailing crystalline segments behind head
+      if (b.segments && b.segments.length > 0) {
+        let prevX = b.x;
+        let prevY = b.y;
+        const spacing = 11;
+        for (const seg of b.segments) {
+          const dx = seg.x - prevX;
+          const dy = seg.y - prevY;
+          const dist = Math.hypot(dx, dy) || 0.001;
+          if (dist > spacing) {
+            seg.x = prevX + (dx / dist) * spacing;
+            seg.y = prevY + (dy / dist) * spacing;
+          }
+          prevX = seg.x;
+          prevY = seg.y;
+        }
+      }
+    }
+
     onBossDefeated(boss) {
       this.bossDefeated = true;
       this.screenShake = 8;
@@ -2127,12 +2344,41 @@
       this.room.grid[6][9] = T.TRIFORCE_ALTAR;
       this.room.grid[6][10] = T.TRIFORCE_ALTAR;
       this._openDoorTiles(this.room, 'south');
-      this.showToast('VAALOR DEFEATED! Step onto the Golden Relic Altar to claim victory!', 6.0);
+      this.saveProgress();
+      this.showToast('VAALOR DEFEATED! Step onto the Golden Relic Altar to claim the Magic Mirror!', 6.0);
+    }
+
+    onFrostBossDefeated(boss) {
+      this.frostBossDefeated = true;
+      this.screenShake = 9;
+      FB.audio.play('victory');
+      this.spawnRing(boss.x, boss.y, '#38bdf8', 42, 0.45);
+      this.spawnParticles(boss.x, boss.y, '#bae6fd', 32, 120, { shape: 'star' });
+      this.spawnParticles(boss.x, boss.y, '#fde047', 24, 100);
+      this.spawnPickup('heart_container', boss.x, boss.y + 14);
+
+      // Reveal Final Triforce Victory Altar in center!
+      this.room.grid[6][9] = T.TRIFORCE_ALTAR;
+      this.room.grid[6][10] = T.TRIFORCE_ALTAR;
+      this._openDoorTiles(this.room, 'south');
+      this.saveProgress();
+      this.showToast('GLACIOR SHATTERED! Step onto the Golden Relic Altar to complete the Grand Quest!', 6.5);
     }
 
     triggerVictory() {
       if (this.state === 'victory') return;
       this.state = 'victory';
+      if (FB.saves) {
+        const meta = FB.saves.getMeta();
+        const prevBest = meta.bestClearTime;
+        const bestClearTime =
+          prevBest === null || prevBest === undefined ? this.elapsedTime : Math.min(prevBest, this.elapsedTime);
+        FB.saves.saveMeta({
+          heroModeUnlocked: true,
+          bestClearTime,
+        });
+        FB.saves.saveSlot(this.activeSaveSlot, this);
+      }
       FB.audio.stopMusic();
       FB.audio.play('victory');
       FB.ui.renderVictory(this);
@@ -2341,6 +2587,8 @@
             this.spawnParticles(p.x, p.y, '#a855f7', 1, 15, { shape: 'dust', life: 0.16, size: 1.8 });
           } else if (p.kind === 'beam' && Math.random() < 0.55) {
             this.spawnParticles(p.x, p.y, '#fde047', 1, 20, { shape: 'star', life: 0.16 });
+          } else if (p.kind === 'ice_shard' && Math.random() < 0.4) {
+            this.spawnParticles(p.x, p.y, '#bae6fd', 1, 16, { shape: 'spark', life: 0.15, size: 1.8 });
           }
           if (p.life <= 0) {
             if (p.kind === 'thrown_pot') {
@@ -2478,6 +2726,7 @@
               p.hitSet.add(e.id);
               e.hit(p.damage, p.x, p.y, p.owner, this, {
                 stun: p.kind === 'boomerang' ? 2.4 : p.kind === 'thrown_pot' ? 0.6 : 0,
+                isFire: p.kind === 'fireball',
               });
               if (p.kind === 'thrown_pot') {
                 FB.audio.play('pot');
@@ -2759,7 +3008,15 @@
       const ctx = this.ctx;
       ctx.save();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = this.room && this.room.area === 'dungeon' ? '#23314d' : '#1f5e2c';
+      const area = this.room ? this.room.area : 'overworld';
+      ctx.fillStyle =
+        area === 'dungeon'
+          ? '#23314d'
+          : area === 'frost'
+            ? '#10283d'
+            : area === 'darkworld'
+              ? '#261b30'
+              : '#1f5e2c';
       ctx.fillRect(0, 0, FB.VIEW_W, FB.VIEW_H);
 
       // Integer-snapped screen shake so tiles never show subpixel grid seams
@@ -2865,8 +3122,54 @@
       }
       ctx.globalAlpha = 1;
 
-      // Subtle atmospheric dungeon vignette
-      if (this.room && this.room.area === 'dungeon') {
+      // 6. Dynamic Darkness & Torch Lighting Pass (Pitch-Black Vault in Frost Spire!)
+      if (this.room && this.room.isDark && !this.room.puzzleSolved) {
+        if (!this.darkCanvas && typeof document !== 'undefined') {
+          this.darkCanvas = document.createElement('canvas');
+          this.darkCanvas.width = FB.VIEW_W;
+          this.darkCanvas.height = FB.VIEW_H;
+          this.darkCtx = this.darkCanvas.getContext('2d');
+        }
+        if (this.darkCtx) {
+          const dctx = this.darkCtx;
+          dctx.globalCompositeOperation = 'source-over';
+          dctx.clearRect(0, 0, FB.VIEW_W, FB.VIEW_H);
+          dctx.fillStyle = 'rgba(4, 7, 18, 0.90)';
+          dctx.fillRect(0, 0, FB.VIEW_W, FB.VIEW_H);
+
+          dctx.globalCompositeOperation = 'destination-out';
+          const punchLight = (lx, ly, rad) => {
+            const g = dctx.createRadialGradient(lx, ly, rad * 0.18, lx, ly, rad);
+            g.addColorStop(0, 'rgba(0, 0, 0, 1)');
+            g.addColorStop(0.68, 'rgba(0, 0, 0, 0.72)');
+            g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            dctx.fillStyle = g;
+            dctx.beginPath();
+            dctx.arc(lx, ly, rad, 0, Math.PI * 2);
+            dctx.fill();
+          };
+
+          const flicker = Math.sin(this.time * 12) * 2.5;
+          for (const h of this.allHeroes) {
+            if (!h.downed) punchLight(Math.round(h.x), Math.round(h.y), 48 + flicker * 0.5);
+          }
+          for (let r = 0; r < FB.ROOM_ROWS; r++) {
+            for (let c = 0; c < FB.ROOM_COLS; c++) {
+              if (this.room.grid[r][c] === T.TORCH_LIT) {
+                punchLight(c * TS + 8, r * TS + 8, 62 + flicker);
+              }
+            }
+          }
+          for (const p of this.projectiles) {
+            if (p.kind === 'fireball' || p.kind === 'beam') {
+              punchLight(Math.round(p.x), Math.round(p.y), 38);
+            }
+          }
+          dctx.globalCompositeOperation = 'source-over';
+          ctx.drawImage(this.darkCanvas, 0, 0);
+        }
+      } else if (this.room && (area === 'dungeon' || area === 'frost' || area === 'darkworld')) {
+        // Subtle atmospheric dungeon / spire / twilight vignette
         const grad = ctx.createRadialGradient(
           FB.VIEW_W / 2,
           FB.VIEW_H / 2,
@@ -2876,7 +3179,14 @@
           FB.VIEW_W * 0.65
         );
         grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        grad.addColorStop(1, 'rgba(6, 10, 20, 0.36)');
+        grad.addColorStop(
+          1,
+          area === 'frost'
+            ? 'rgba(8, 28, 48, 0.34)'
+            : area === 'darkworld'
+              ? 'rgba(24, 8, 36, 0.30)'
+              : 'rgba(6, 10, 20, 0.36)'
+        );
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, FB.VIEW_W, FB.VIEW_H);
       }
@@ -2951,6 +3261,21 @@
         ctx.beginPath();
         ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
         ctx.fill();
+      } else if (p.kind === 'ice_shard') {
+        const ang = Math.atan2(p.vy, p.vx);
+        ctx.rotate(ang);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.fillRect(-7, -3, 14, 6);
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.moveTo(7, 0);
+        ctx.lineTo(0, -3.5);
+        ctx.lineTo(-6, 0);
+        ctx.lineTo(0, 3.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#f0f9ff';
+        ctx.fillRect(-3, -1, 7, 2);
       } else if (p.kind === 'beam') {
         const ang = Math.atan2(p.vy, p.vx);
         ctx.rotate(ang);

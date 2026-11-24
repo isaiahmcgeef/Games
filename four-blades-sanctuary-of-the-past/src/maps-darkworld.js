@@ -142,7 +142,10 @@
       exits: {
         south: 'dw_start',
       },
-      portals: [],
+      portals: [
+        { col: 9, row: 2, targetRoom: 'fs_entry', targetCol: 9, targetRow: 10 },
+        { col: 10, row: 2, targetRoom: 'fs_entry', targetCol: 10, targetRow: 10 },
+      ],
       grid: parseGrid([
         'SSSSSSSSSSSSSSSSSSSS',
         'SSdddSddSSSSddSdddSS',

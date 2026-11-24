@@ -262,6 +262,26 @@
             hp: 3,
           }));
           break;
+        case 'frost_boss':
+          this.w = 28;
+          this.h = 28;
+          this.maxHp = Math.round(42 * scale);
+          this.speed = 50;
+          this.damage = 2;
+          this.flying = true;
+          this.phase = 1;
+          this.bossState = 'weave';
+          this.stateTimer = 2.0;
+          this.lookAngle = Math.PI / 2;
+          this.dashVx = 0;
+          this.dashVy = 0;
+          this.weavePhase = 0;
+          this.segments = Array.from({ length: 6 }, (_, i) => ({
+            x,
+            y: y - (i + 1) * 10,
+            r: Math.max(5, 11 - i),
+          }));
+          break;
         default:
           this.maxHp = 4;
           this.speed = 36;
@@ -290,23 +310,31 @@
         damage = 1;
       }
 
+      // Ember Rod melts Frost Sovereign Glacior for bonus fire damage!
+      if (this.type === 'frost_boss' && options.isFire) {
+        damage += 2;
+        game.spawnParticles(this.x, this.y, '#fb923c', 10, 80, { shape: 'star' });
+        game.addFloatingText(this.x, this.y - 16, 'MELT!', '#fb923c');
+      }
+
       this.hp -= damage;
       this.hurtTimer = 0.24;
       if (options.stun) {
         this.stunTimer = Math.max(this.stunTimer, options.stun);
       }
 
+      const isAnyBoss = this.type === 'boss' || this.type === 'frost_boss';
       const angle = Math.atan2(this.y - srcY, this.x - srcX);
-      const kb = this.type === 'boss' ? 45 : this.type === 'knight' ? 85 : 155;
+      const kb = isAnyBoss ? 45 : this.type === 'knight' ? 85 : 155;
       this.knockX = Math.cos(angle) * kb;
       this.knockY = Math.sin(angle) * kb;
-      this.knockTimer = this.type === 'boss' ? 0.08 : 0.16;
+      this.knockTimer = isAnyBoss ? 0.08 : 0.16;
 
       FB.audio.play('hit');
       game.hitstop = Math.max(game.hitstop, 0.032);
-      game.spawnParticles(this.x, this.y, '#fde047', 6);
+      game.spawnParticles(this.x, this.y, this.type === 'frost_boss' ? '#7dd3fc' : '#fde047', 6);
 
-      // Boss phase 2 transition
+      // Boss phase 2 transitions
       if (this.type === 'boss' && this.phase === 1 && this.hp <= this.maxHp * 0.5 && this.hp > 0) {
         this.phase = 2;
         FB.audio.play('bossRoar');
@@ -318,6 +346,12 @@
           o.hp = 3;
           o.radius = 34;
         });
+      } else if (this.type === 'frost_boss' && this.phase === 1 && this.hp <= this.maxHp * 0.5 && this.hp > 0) {
+        this.phase = 2;
+        FB.audio.play('bossRoar');
+        game.screenShake = 7;
+        game.spawnRing(this.x, this.y, '#38bdf8', 36, 0.38);
+        game.showToast('Frost Sovereign Glacior enters Phase II — Eternal Blizzard!');
       }
 
       if (this.hp <= 0) {
@@ -327,10 +361,12 @@
         }
         FB.audio.play('enemyDie');
         game.spawnParticles(this.x, this.y, '#f8fafc', 12);
-        game.spawnParticles(this.x, this.y, '#facc15', 8);
+        game.spawnParticles(this.x, this.y, this.type === 'frost_boss' ? '#38bdf8' : '#facc15', 10);
 
         if (this.type === 'boss') {
           game.onBossDefeated(this);
+        } else if (this.type === 'frost_boss') {
+          game.onFrostBossDefeated(this);
         } else {
           // Drop loot
           const roll = Math.random();

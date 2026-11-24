@@ -1458,6 +1458,10 @@
         case 'boss':
           this._drawBoss(ctx, e, time, flash);
           break;
+
+        case 'frost_boss':
+          this._drawFrostBoss(ctx, e, time, flash);
+          break;
       }
 
       // Orbiting twin stun stars
@@ -1570,6 +1574,105 @@
           ctx.fillRect(ox - 1, oy - 1, 2, 2);
         }
       }
+      ctx.restore();
+    }
+
+    _drawFrostBoss(ctx, b, time, flash) {
+      // Frost Sovereign Glacior — Segmented Crystalline Cryo-Wyrm!
+      const enraged = b.phase === 2;
+      const telegraph = b.bossState === 'telegraph';
+      const bob = Math.sin(time * 5.2) * 2.5;
+      const cx = b.x;
+      const cy = b.y + bob;
+
+      ctx.save();
+
+      // 1. Trailing Crystalline Body Segments (tail -> neck)
+      if (b.segments && b.segments.length > 0) {
+        for (let i = b.segments.length - 1; i >= 0; i--) {
+          const seg = b.segments[i];
+          const sr = seg.r || Math.max(5, 11 - i);
+          const sy = seg.y + Math.sin(time * 6 + i * 0.9) * 1.5;
+
+          // Subtle ground shadow under segment
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+          ctx.beginPath();
+          ctx.arc(seg.x, sy + sr + 3, sr * 0.75, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Glacial outer aura
+          ctx.fillStyle = enraged ? 'rgba(56, 189, 248, 0.34)' : 'rgba(125, 211, 252, 0.22)';
+          ctx.beginPath();
+          ctx.arc(seg.x, sy, sr + 2.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Crystalline armor scale
+          ctx.fillStyle = flash ? '#ffffff' : i % 2 === 0 ? '#0284c7' : '#0369a1';
+          ctx.beginPath();
+          ctx.arc(seg.x, sy, sr, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Shimmering ice spine crest
+          ctx.fillStyle = flash ? '#ffffff' : i === b.segments.length - 1 ? '#fde047' : '#bae6fd';
+          ctx.fillRect(Math.round(seg.x - sr * 0.45), Math.round(sy - sr * 0.45), Math.max(3, Math.round(sr * 0.9)), 3);
+        }
+      }
+
+      // 2. Phase II Blizzard Aura & Charge Telegraph Ring
+      if (enraged) {
+        ctx.strokeStyle = 'rgba(125, 211, 252, 0.65)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 20 + Math.sin(time * 10) * 2.2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (telegraph) {
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.35)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 22 + Math.sin(time * 34) * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 3. Cryo-Wyrm Horned Head
+      ctx.fillStyle = flash ? '#ffffff' : enraged ? '#0c4a6e' : '#075985';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Faceted crystalline brow plate
+      ctx.fillStyle = flash ? '#ffffff' : '#38bdf8';
+      ctx.fillRect(cx - 10, cy - 9, 20, 8);
+      ctx.fillStyle = '#e0f2fe';
+      ctx.fillRect(cx - 6, cy - 8, 12, 3);
+
+      // Jagged Frost Crown Horns
+      ctx.fillStyle = '#bae6fd';
+      ctx.fillRect(cx - 13, cy - 16, 4, 8);
+      ctx.fillRect(cx + 9, cy - 16, 4, 8);
+      ctx.fillRect(cx - 3, cy - 19, 6, 8);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - 12, cy - 15, 2, 4);
+      ctx.fillRect(cx + 10, cy - 15, 2, 4);
+      ctx.fillRect(cx - 1, cy - 18, 2, 5);
+
+      // Crystalline Jaw Tusks
+      ctx.fillStyle = '#f0f9ff';
+      ctx.fillRect(cx - 8, cy + 8, 3, 5);
+      ctx.fillRect(cx + 5, cy + 8, 3, 5);
+
+      // Fierce Tracking Eyes
+      const lookX = Math.cos(b.lookAngle || 0) * 2.2;
+      const lookY = Math.sin(b.lookAngle || 0) * 1.2;
+      ctx.fillStyle = '#09090b';
+      ctx.fillRect(cx - 8, cy - 2, 6, 5);
+      ctx.fillRect(cx + 2, cy - 2, 6, 5);
+      ctx.fillStyle = telegraph ? '#fde047' : enraged ? '#f43f5e' : '#38bdf8';
+      ctx.fillRect(cx - 6 + lookX, cy - 1 + lookY, 3, 3);
+      ctx.fillRect(cx + 4 + lookX, cy - 1 + lookY, 3, 3);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - 6 + lookX, cy - 1 + lookY, 1, 1);
+      ctx.fillRect(cx + 4 + lookX, cy - 1 + lookY, 1, 1);
+
       ctx.restore();
     }
 

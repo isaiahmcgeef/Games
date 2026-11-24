@@ -24,8 +24,11 @@
         hudKeys: document.getElementById('hud-keys'),
         hudBossKey: document.getElementById('hud-boss-key'),
         hudRoomName: document.getElementById('hud-room-name'),
+        hudTimer: document.getElementById('hud-timer'),
+        hudHeroBadge: document.getElementById('hud-hero-badge'),
         minimapCanvas: document.getElementById('minimap-canvas'),
         bossBarWrap: document.getElementById('boss-bar-wrap'),
+        bossBarTitle: document.getElementById('boss-bar-title'),
         bossBarFill: document.getElementById('boss-bar-fill'),
         toastBanner: document.getElementById('toast-banner'),
         dialogBox: document.getElementById('dialog-box'),
@@ -318,22 +321,44 @@
 
       this.els.hudPlayers.innerHTML = html;
 
+      const inFrost = game.room && game.room.area === 'frost';
       if (this.els.hudKeys) {
-        this.els.hudKeys.textContent = `${game.smallKeys}`;
+        this.els.hudKeys.textContent = `${inFrost ? game.frostSmallKeys : game.smallKeys}`;
       }
       if (this.els.hudBossKey) {
-        this.els.hudBossKey.classList.toggle('has-key', game.hasBossKey);
-        this.els.hudBossKey.textContent = game.hasBossKey ? 'BOSS KEY ✓' : 'BOSS KEY —';
+        const hasBk = inFrost ? game.hasFrostBossKey : game.hasBossKey;
+        this.els.hudBossKey.classList.toggle('has-key', hasBk);
+        this.els.hudBossKey.textContent = hasBk
+          ? inFrost
+            ? 'FROST KEY ✓'
+            : 'BOSS KEY ✓'
+          : inFrost
+            ? 'FROST KEY —'
+            : 'BOSS KEY —';
       }
       if (this.els.hudRoomName && game.room) {
         this.els.hudRoomName.textContent = game.room.name;
       }
+      if (this.els.hudTimer) {
+        const t = game.elapsedTime || 0;
+        const mins = Math.floor(t / 60);
+        const secs = Math.floor(t % 60);
+        const tenths = Math.floor((t * 10) % 10);
+        this.els.hudTimer.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${tenths}`;
+      }
+      if (this.els.hudHeroBadge) {
+        this.els.hudHeroBadge.classList.toggle('hidden', !game.heroMode);
+      }
 
-      // Boss health bar
-      const boss = game.enemies.find((e) => e.type === 'boss' && e.alive);
+      // Boss health bar (Vaalor or Frost Sovereign Glacior)
+      const boss = game.enemies.find((e) => (e.type === 'boss' || e.type === 'frost_boss') && e.alive);
       if (this.els.bossBarWrap && this.els.bossBarFill) {
         if (boss) {
           this.els.bossBarWrap.classList.remove('hidden');
+          if (this.els.bossBarTitle) {
+            this.els.bossBarTitle.textContent =
+              boss.type === 'frost_boss' ? 'Frost Sovereign Glacior' : 'Shadow Wraith Vaalor';
+          }
           const pct = Math.max(0, Math.min(100, (boss.hp / boss.maxHp) * 100));
           this.els.bossBarFill.style.width = `${pct}%`;
         } else {
@@ -415,8 +440,15 @@
       const secs = Math.floor(game.elapsedTime);
       const mins = Math.floor(secs / 60);
       const rem = secs % 60;
+      const meta = FB.saves ? FB.saves.getMeta() : {};
+      let bestStr = '';
+      if (meta.bestClearTime !== null && meta.bestClearTime !== undefined) {
+        const bSecs = Math.floor(meta.bestClearTime);
+        bestStr = `  •  Best: ${Math.floor(bSecs / 60)}m ${String(bSecs % 60).padStart(2, '0')}s`;
+      }
+      const modeStr = game.heroMode ? '  •  ★ HERO MODE CLEAR!' : '  •  ★ Hero Mode Unlocked!';
       if (this.els.victoryTime) {
-        this.els.victoryTime.textContent = `Clear Time: ${mins}m ${String(rem).padStart(2, '0')}s`;
+        this.els.victoryTime.textContent = `Grand Quest Clear Time: ${mins}m ${String(rem).padStart(2, '0')}s${bestStr}${modeStr}`;
       }
 
       // Rank players by Four Swords Score (Rupees + Kills * 15 + Revives * 25)

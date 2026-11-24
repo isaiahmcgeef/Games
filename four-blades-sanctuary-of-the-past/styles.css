@@ -218,6 +218,26 @@ body {
   border-color: var(--gold);
 }
 
+.hud-timer {
+  color: #bae6fd;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-hero-mode-badge {
+  color: #111827;
+  background: linear-gradient(180deg, #fde047 0%, #eab308 100%);
+  border: 1px solid #fef08a;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+}
+
 #minimap-canvas {
   border: 1px solid var(--gold-dim);
   border-radius: 5px;

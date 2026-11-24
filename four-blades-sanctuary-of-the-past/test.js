@@ -323,7 +323,87 @@ for (let i = 0; i < 45; i++) {
 assert(h1.x > startX + 70, `Expected Hookshot to zip hero across Crimson Rapids river (moved ${Math.round(h1.x - startX)}px)`);
 console.log('[PASS] Phase 3: Act I Clear, Magic Mirror Light/Dark Warp & Hookshot Grapple');
 
-// 9. Visit & render every room in the world
+// 9. Test Phase 4: Frost Spire (Ice Sliding Blocks, Frost Keys, Dynamic Darkness, Cryo-Wyrm Boss, Grand Victory & Hero Mode)
+assert(Object.keys(g.rooms).length === 25, `Expected 25 total rooms, got ${Object.keys(g.rooms).length}`);
+
+// 9a. Sliding Ice Block Puzzle in fs_ice_blocks
+g.enterRoom('fs_ice_blocks', { col: 15, row: 6 });
+assert(g.room.grid[5][7] === T.BLOCK_PUSH && g.room.grid[8][7] === T.BLOCK_PUSH, 'Two ice push blocks present');
+// Push Block 1 right -> stops at (10, 5) before pillar at (11, 5)
+h1.pushTimer = 0; h1.pushTileKey = null;
+g.handleHeroBump(h1, 7, 5, 1, 0, 0.3);
+assert(g.room.grid[5][10] === T.BLOCK_PUSH, 'Ice block 1 slid across ice to (10,5)');
+assert(g.room.grid[5][7] === T.ICE_FLOOR, 'Vacated ice block cell restored as ICE_FLOOR');
+// Push Block 1 up -> locks onto switch at (10, 3)
+h1.pushTimer = 0; h1.pushTileKey = null;
+g.handleHeroBump(h1, 10, 5, 0, -1, 0.3);
+assert(g.room.grid[3][10] === T.SWITCH_FLOOR_ON, 'Ice block 1 slid north and locked switch (10,3)');
+// Push Block 2 right -> stops at (10, 8), then push down -> locks switch (10, 9)
+h1.pushTimer = 0; h1.pushTileKey = null;
+g.handleHeroBump(h1, 7, 8, 1, 0, 0.3);
+assert(g.room.grid[8][10] === T.BLOCK_PUSH, 'Ice block 2 slid across ice to (10,8)');
+h1.pushTimer = 0; h1.pushTileKey = null;
+g.handleHeroBump(h1, 10, 8, 0, 1, 0.3);
+assert(g.room.grid[9][10] === T.SWITCH_FLOOR_ON, 'Ice block 2 slid south and locked switch (10,9)');
+g.updatePuzzles();
+assert(g.room.puzzleSolved === true && g.room.grid[2][15] === T.CHEST_CLOSED, 'fs_ice_blocks solved and Frost Key chest spawned');
+g.openChest(15, 2, false, h1);
+assert(g.frostSmallKeys === 1, 'Claimed Frost Small Key');
+
+// Unlock fs_entry north Frost seal
+g.enterRoom('fs_entry', { col: 10, row: 2 });
+g.handleHeroBump(h1, 9, 0, 0, -1, 0.05);
+assert(g.frostSmallKeys === 0 && g.room.grid[0][9] === T.DOOR_OPEN, 'Unlocked Frost Spire small door');
+
+// 9b. Dynamic Darkness Pitch-Black Vault (fs_dark_hall)
+g.enterRoom('fs_dark_hall', { col: 10, row: 10 });
+assert(g.room.isDark === true, 'fs_dark_hall flagged isDark');
+g.render();
+assert(!!g.darkCanvas, 'Offscreen dynamic darkness mask initialized and rendered');
+for (let r = 0; r < FB.ROOM_ROWS; r++) {
+  for (let c = 0; c < FB.ROOM_COLS; c++) {
+    if (g.room.grid[r][c] === T.TORCH_UNLIT) g.room.grid[r][c] = T.TORCH_LIT;
+  }
+}
+g.updatePuzzles();
+assert(g.room.puzzleSolved === true && g.room.grid[6][19] === T.DOOR_OPEN, 'Lighting torches cleared darkness and unlocked east door');
+
+// 9c. Cryo-Wyrm Boss (fs_boss), Fire Rod Melt Bonus, Defeat & Grand Victory -> Hero Mode Unlock
+g.enterRoom('fs_boss', { col: 10, row: 10 });
+const wyrm = g.enemies.find((e) => e.type === 'frost_boss');
+assert(wyrm && wyrm.segments && wyrm.segments.length === 6, 'Cryo-Wyrm boss spawned with 6 crystalline segments');
+for (let i = 0; i < 60; i++) {
+  g.updateEnemies(0.05);
+  g.updateProjectiles(0.05);
+}
+g.render();
+const hpBeforeMelt = wyrm.hp;
+wyrm.hurtTimer = 0;
+wyrm.hit(3, h1.x, h1.y, h1, g, { isFire: true });
+assert(wyrm.hp === hpBeforeMelt - 5, `Expected Fire Rod melt bonus (3+2=5 dmg), got ${hpBeforeMelt - wyrm.hp}`);
+wyrm.hurtTimer = 0;
+wyrm.hit(999, h1.x, h1.y, h1, g, {});
+assert(!wyrm.alive && g.frostBossDefeated === true, 'Cryo-Wyrm defeated');
+assert(g.room.grid[6][9] === T.TRIFORCE_ALTAR, 'Final Triforce Altar revealed in fs_boss');
+g.triggerVictory();
+assert(g.state === 'victory', 'Grand Victory triggered');
+assert(FB.saves.getMeta().heroModeUnlocked === true, 'Hero Mode unlocked upon clearing Grand Quest');
+
+// 9d. Hero Mode: 2x Damage + No Free Bush Heart Drops
+g.startNewGame(1, { slotIndex: 0, heroMode: true });
+const hmHero = g.humanHeroes[0];
+const hmHp0 = hmHero.hp;
+hmHero.invuln = 0;
+hmHero.damage(1, hmHero.x + 10, hmHero.y, g);
+assert(hmHero.hp === hmHp0 - 2, `Expected Hero Mode 2x damage (2 HP), got ${hmHp0 - hmHero.hp}`);
+g.pickups = [];
+for (let i = 0; i < 60; i++) {
+  g._dropDestructibleLoot(100, 100, false);
+}
+assert(!g.pickups.some((p) => p.kind === 'heart'), 'Hero Mode disables free heart drops from bushes/pots');
+console.log('[PASS] Phase 4: Frost Spire, Ice Blocks, Dynamic Darkness, Cryo-Wyrm Boss, Grand Victory & Hero Mode');
+
+// 10. Visit & render every room in the world
 for (const id of Object.keys(g.rooms)) {
   g.enterRoom(id, { col: 10, row: 7 });
   g.update(0.02);

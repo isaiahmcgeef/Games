@@ -16,6 +16,8 @@
         <div class="hud-dungeon-status">
           <div id="hud-room-name" class="hud-room-name">Sanctuary Courtyard</div>
           <div class="hud-keys-row">
+            <span id="hud-hero-badge" class="hud-hero-mode-badge hidden">★ HERO</span>
+            <span id="hud-timer" class="hud-timer">00:00.0</span>
             <span class="key-badge">🗝 Keys: <span id="hud-keys">0</span></span>
             <span id="hud-boss-key" class="boss-key-badge">BOSS KEY —</span>
           </div>
@@ -35,7 +37,7 @@
 
       <!-- Boss HP Bar -->
       <div id="boss-bar-wrap" class="boss-bar-wrap hidden">
-        <div class="boss-bar-title">Shadow Wraith Vaalor</div>
+        <div id="boss-bar-title" class="boss-bar-title">Shadow Wraith Vaalor</div>
         <div class="boss-bar-track">
           <div id="boss-bar-fill" class="boss-bar-fill"></div>
         </div>
@@ -177,6 +179,7 @@
   <script defer src="src/maps-overworld.js"></script>
   <script defer src="src/maps-palace.js"></script>
   <script defer src="src/maps-darkworld.js"></script>
+  <script defer src="src/maps-frost.js"></script>
   <script defer src="src/entities.js"></script>
   <script defer src="src/ui.js"></script>
   <script defer src="src/game.js"></script>
