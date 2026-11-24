@@ -576,13 +576,14 @@
         }
       }
 
-      // Compute lunge offset during sword slash or pushing
+      // Compute lunge offset during sword slash (extra deep lunge on Combo Hit 3 Thrust!) or pushing
       const dv = FB.DIR_VEC[hero.dir] || FB.DIR_VEC[0];
       let lungeX = 0;
       let lungeY = 0;
       if (hero.swordTimer > 0) {
         const prog = 1 - hero.swordTimer / FB.CONFIG.SWORD_DURATION;
-        const thrust = Math.sin(prog * Math.PI) * 2.5;
+        const mag = hero.comboStep === 2 ? 4.8 : 2.6;
+        const thrust = Math.sin(prog * Math.PI) * mag;
         lungeX = dv.x * thrust;
         lungeY = dv.y * thrust;
       } else if (hero.pushing) {
@@ -594,6 +595,15 @@
       const y = Math.round(hero.y - 10 + lungeY);
 
       ctx.save();
+
+      // Golden Parry Counter Aura
+      if (hero.parryFlash > 0) {
+        ctx.strokeStyle = 'rgba(253, 224, 71, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(hero.x, hero.y, 11 + (0.4 - hero.parryFlash) * 8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       // Spirit Clone shimmering rune aura & anchor ring
       if (hero.isClone) {
@@ -897,56 +907,146 @@
         ctx.fillStyle = '#fef9c3';
         ctx.fillRect(bx - 2, by - 2, 4, 4);
       } else if (hero.swordTimer > 0) {
-        const prog = 1 - hero.swordTimer / FB.CONFIG.SWORD_DURATION;
+        const prog = Math.max(0, Math.min(1, 1 - hero.swordTimer / FB.CONFIG.SWORD_DURATION));
         let baseAngle = Math.PI / 2;
         if (hero.dir === FB.DIRS.UP) baseAngle = -Math.PI / 2;
         else if (hero.dir === FB.DIRS.LEFT) baseAngle = Math.PI;
         else if (hero.dir === FB.DIRS.RIGHT) baseAngle = 0;
 
-        // Smooth ease-out swing arc
-        const eased = 1 - Math.pow(1 - prog, 2);
-        const startA = baseAngle - 1.05;
-        const a = startA + eased * 2.1;
-
-        // Outer soft tunic/gold smear
-        ctx.save();
-        ctx.globalAlpha = Math.max(0.15, (1 - prog * 0.65) * 0.55);
-        ctx.strokeStyle = p.tunicLight;
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.arc(hero.x + lungeX, hero.y + lungeY, 15, Math.max(startA, a - 1.35), a);
-        ctx.stroke();
-
-        // Crisp white-gold inner slash crescent
-        ctx.globalAlpha = Math.max(0.25, 1 - prog * 0.5);
-        ctx.strokeStyle = '#fef9c3';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(hero.x + lungeX, hero.y + lungeY, 16, Math.max(startA, a - 0.95), a);
-        ctx.stroke();
-        ctx.restore();
-
-        // Steel Blade + crossguard hilt
         const ox = hero.x + lungeX;
         const oy = hero.y + lungeY;
-        const bx = ox + Math.cos(a) * 17;
-        const by = oy + Math.sin(a) * 17;
-        ctx.strokeStyle = '#f1f5f9';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(ox + Math.cos(a) * 4, oy + Math.sin(a) * 4);
-        ctx.lineTo(bx, by);
-        ctx.stroke();
-        ctx.strokeStyle = '#94a3b8';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(ox + Math.cos(a) * 5, oy + Math.sin(a) * 5);
-        ctx.lineTo(ox + Math.cos(a) * 15, oy + Math.sin(a) * 15);
-        ctx.stroke();
+        const step = hero.comboStep || 0;
 
-        // Gold crossguard
-        ctx.fillStyle = '#facc15';
-        ctx.fillRect(ox + Math.cos(a) * 5 - 1.5, oy + Math.sin(a) * 5 - 1.5, 3, 3);
+        if (step === 2) {
+          // ======================================================
+          // COMBO HIT 3: HEROIC PIERCING THRUST FINISHER!
+          // ======================================================
+          const thrustCurve = prog < 0.35 ? prog / 0.35 : 1 - (prog - 0.35) / 0.65 * 0.45;
+          const reach = 11 + thrustCurve * 13; // Up to 24px gleaming thrust!
+          const bx = ox + Math.cos(baseAngle) * reach;
+          const by = oy + Math.sin(baseAngle) * reach;
+          const perpX = -Math.sin(baseAngle);
+          const perpY = Math.cos(baseAngle);
+
+          // Twin V-wake golden-white shockwave energy cones
+          ctx.save();
+          ctx.globalAlpha = Math.max(0.15, 1 - prog * 0.85);
+          ctx.strokeStyle = p.tunicLight;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(ox + Math.cos(baseAngle) * 7 + perpX * 8, oy + Math.sin(baseAngle) * 7 + perpY * 8);
+          ctx.moveTo(bx, by);
+          ctx.lineTo(ox + Math.cos(baseAngle) * 7 - perpX * 8, oy + Math.sin(baseAngle) * 7 - perpY * 8);
+          ctx.stroke();
+
+          // Inner bright golden energy lance aura
+          ctx.strokeStyle = '#fde047';
+          ctx.lineWidth = 4.5;
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(baseAngle) * 5, oy + Math.sin(baseAngle) * 5);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+          ctx.restore();
+
+          // Gleaming steel core + diamond star burst at tip
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(baseAngle) * 4, oy + Math.sin(baseAngle) * 4);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+
+          // Crossguard
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(baseAngle) * 6 + perpX * 3.5, oy + Math.sin(baseAngle) * 6 + perpY * 3.5);
+          ctx.lineTo(ox + Math.cos(baseAngle) * 6 - perpX * 3.5, oy + Math.sin(baseAngle) * 6 - perpY * 3.5);
+          ctx.stroke();
+
+          // Tip star flare
+          ctx.fillStyle = '#fef9c3';
+          ctx.fillRect(Math.round(bx) - 3, Math.round(by) - 1, 7, 2);
+          ctx.fillRect(Math.round(bx) - 1, Math.round(by) - 3, 2, 7);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(Math.round(bx) - 1, Math.round(by) - 1, 3, 3);
+        } else {
+          // ======================================================
+          // COMBO HIT 1 (Forehand) & HIT 2 (Backhand Reverse Cross-Cut)
+          // ======================================================
+          const reverse = step === 1;
+          const eased = 1 - Math.pow(1 - prog, 3); // Ultra-snappy ease-out!
+          const halfArc = 1.25;
+          const startA = reverse ? baseAngle + halfArc : baseAngle - halfArc;
+          const sweep = (reverse ? -1 : 1) * eased * (halfArc * 2);
+          const a = startA + sweep;
+
+          // Determine arc bounds for ctx.arc (always draw along sweep direction)
+          const trailLen = 1.55;
+          const trailStart = reverse ? Math.min(startA, a + trailLen) : Math.max(startA, a - trailLen);
+          const innerTrailStart = reverse ? Math.min(startA, a + 1.05) : Math.max(startA, a - 1.05);
+
+          ctx.save();
+          // Band 1: Wide outer crescent smear (tunic highlight for Hit 1, cyan-silver for Hit 2)
+          ctx.globalAlpha = Math.max(0.12, (1 - prog * 0.72) * 0.58);
+          ctx.strokeStyle = reverse ? '#67e8f9' : p.tunicLight;
+          ctx.lineWidth = 7;
+          ctx.beginPath();
+          ctx.arc(ox, oy, 15.5, trailStart, a, reverse);
+          ctx.stroke();
+
+          // Band 2: Golden-warm energy ribbon
+          ctx.globalAlpha = Math.max(0.2, (1 - prog * 0.6) * 0.8);
+          ctx.strokeStyle = reverse ? '#bae6fd' : '#fde047';
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.arc(ox, oy, 17, innerTrailStart, a, reverse);
+          ctx.stroke();
+
+          // Band 3: Pure white razor leading edge
+          ctx.globalAlpha = Math.max(0.25, 1 - prog * 0.55);
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(ox, oy, 18.5, reverse ? Math.min(startA, a + 0.65) : Math.max(startA, a - 0.65), a, reverse);
+          ctx.stroke();
+          ctx.restore();
+
+          // Tapered Steel Blade + Bevel + Crossguard
+          const bx = ox + Math.cos(a) * 18.5;
+          const by = oy + Math.sin(a) * 18.5;
+          const perpX = -Math.sin(a);
+          const perpY = Math.cos(a);
+
+          ctx.strokeStyle = '#f8fafc';
+          ctx.lineWidth = 2.8;
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(a) * 4, oy + Math.sin(a) * 4);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+
+          ctx.strokeStyle = '#94a3b8';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(a) * 5, oy + Math.sin(a) * 5);
+          ctx.lineTo(ox + Math.cos(a) * 16, oy + Math.sin(a) * 16);
+          ctx.stroke();
+
+          // Golden Crossguard bar
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(ox + Math.cos(a) * 5.5 + perpX * 3, oy + Math.sin(a) * 5.5 + perpY * 3);
+          ctx.lineTo(ox + Math.cos(a) * 5.5 - perpX * 3, oy + Math.sin(a) * 5.5 - perpY * 3);
+          ctx.stroke();
+
+          // Tip gleam spark at peak velocity
+          if (prog < 0.65) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(bx) - 1, Math.round(by) - 1, 3, 3);
+          }
+        }
       }
 
       // Small Player tag indicator above head in multiplayer
@@ -1037,21 +1137,41 @@
           ctx.fillStyle = '#fde047';
           ctx.fillRect(x + 5, y + 4 + bob, 2, 1);
           ctx.fillRect(x + 9, y + 4 + bob, 2, 1);
-          // Animated thrusting spear!
+          // Animated thrusting spear with parry telegraph & active lunge!
           const dv = FB.DIR_VEC[e.dir] || FB.DIR_VEC[0];
-          const thrust = Math.sin(time * 9 + e.x) * 2 + 12;
+          const telegraph = e.telegraphTimer > 0;
+          const lunging = e.lungeTimer > 0;
+          const thrust = telegraph
+            ? 8
+            : lunging
+              ? 18
+              : Math.sin(time * 9 + e.x) * 2 + 12;
           ctx.strokeStyle = '#8b5a2b';
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.moveTo(e.x, e.y + bob);
           ctx.lineTo(e.x + dv.x * (thrust - 3), e.y + bob + dv.y * (thrust - 3));
           ctx.stroke();
-          ctx.strokeStyle = '#e2e8f0';
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = telegraph ? '#fde047' : lunging ? '#ffffff' : '#e2e8f0';
+          ctx.lineWidth = lunging ? 2.5 : 2;
           ctx.beginPath();
           ctx.moveTo(e.x + dv.x * (thrust - 4), e.y + bob + dv.y * (thrust - 4));
           ctx.lineTo(e.x + dv.x * (thrust + 2), e.y + bob + dv.y * (thrust + 2));
           ctx.stroke();
+          if (telegraph) {
+            const tx = Math.round(e.x + dv.x * (thrust + 2));
+            const ty = Math.round(e.y + bob + dv.y * (thrust + 2));
+            ctx.fillStyle = Math.floor(time * 24) % 2 === 0 ? '#ffffff' : '#fde047';
+            ctx.fillRect(tx - 2, ty, 5, 1);
+            ctx.fillRect(tx, ty - 2, 1, 5);
+          } else if (lunging) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(e.x + dv.x * 6, e.y + bob + dv.y * 6);
+            ctx.lineTo(e.x + dv.x * (thrust + 4), e.y + bob + dv.y * (thrust + 4));
+            ctx.stroke();
+          }
           break;
         }
 
@@ -1082,7 +1202,9 @@
 
         case 'stalfos': {
           const rattle = step4 === 1 ? -1 : step4 === 3 ? 1 : 0;
-          const windup = e.shootTimer < 0.35 ? -3 : 0;
+          const telegraph = e.telegraphTimer > 0;
+          const lunging = e.lungeTimer > 0;
+          const windup = telegraph ? -5 : e.shootTimer < 0.35 ? -3 : 0;
           // Rattling bone legs
           ctx.fillStyle = flash ? '#fff' : '#cbd5e1';
           ctx.fillRect(x + 5, y + 12 + rattle, 2, 3);
@@ -1105,16 +1227,31 @@
           ctx.fillRect(x + 1, y + 6 + bob, 3, 6);
           ctx.fillStyle = '#facc15';
           ctx.fillRect(x + 2, y + 8 + bob, 1, 2);
-          ctx.fillStyle = '#f8fafc';
+          ctx.fillStyle = telegraph ? '#fde047' : '#f8fafc';
           ctx.fillRect(x + 12, y + 3 + bob + windup + (step4 % 2), 2, 8);
+          if (telegraph) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + 11, y + 2 + bob + windup, 4, 1);
+            ctx.fillRect(x + 12, y + 1 + bob + windup, 2, 4);
+          } else if (lunging) {
+            const dv = FB.DIR_VEC[e.dir] || FB.DIR_VEC[0];
+            const ba = Math.atan2(dv.y, dv.x);
+            ctx.strokeStyle = 'rgba(248, 250, 252, 0.85)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, 13, ba - 0.9, ba + 0.9);
+            ctx.stroke();
+          }
           break;
         }
 
         case 'knight': {
-          // Heavy Darknut / Armored Knight with flowing cape & gleaming broadsword
+          // Heavy Darknut / Armored Knight with flowing cape, parry telegraph & broadsword slash!
           const stompL = step4 === 1 ? -1 : 0;
           const stompR = step4 === 3 ? -1 : 0;
           const capeSway = Math.round(Math.sin(time * 7 + e.x));
+          const telegraph = e.telegraphTimer > 0;
+          const lunging = e.lungeTimer > 0;
           // Flowing crimson cape behind
           ctx.fillStyle = flash ? '#fff' : '#991b1b';
           ctx.fillRect(x + 2 + capeSway, y + 6 + bob, 14, 9);
@@ -1141,10 +1278,24 @@
           ctx.fillRect(x + 0, y + 5 + bob, 5, 10);
           ctx.fillStyle = '#fef08a';
           ctx.fillRect(x + 1, y + 6 + bob, 1, 7);
-          ctx.fillStyle = '#e2e8f0';
-          ctx.fillRect(x + 15, y + 2 + bob + (step4 % 2) * 2, 2, 11);
+          const swordLift = telegraph ? -5 : (step4 % 2) * 2;
+          ctx.fillStyle = telegraph ? '#fde047' : '#e2e8f0';
+          ctx.fillRect(x + 15, y + 2 + bob + swordLift, 2, 11);
           ctx.fillStyle = '#facc15';
-          ctx.fillRect(x + 14, y + 10 + bob + (step4 % 2) * 2, 4, 2);
+          ctx.fillRect(x + 14, y + 10 + bob + swordLift, 4, 2);
+          if (telegraph) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + 14, y + 1 + bob + swordLift, 5, 1);
+            ctx.fillRect(x + 16, y - 1 + bob + swordLift, 1, 5);
+          } else if (lunging) {
+            const dv = FB.DIR_VEC[e.dir] || FB.DIR_VEC[0];
+            const ba = Math.atan2(dv.y, dv.x);
+            ctx.strokeStyle = 'rgba(253, 224, 71, 0.85)';
+            ctx.lineWidth = 3.5;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, 16, ba - 1.0, ba + 1.0);
+            ctx.stroke();
+          }
           break;
         }
 

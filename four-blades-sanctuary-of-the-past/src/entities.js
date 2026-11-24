@@ -73,6 +73,11 @@
       this.pushing = false;
       this.afterimages = [];
       this.dashDustTick = 0;
+
+      // 3-hit sword combo & blade parry state
+      this.comboStep = 0; // 0 = Forehand, 1 = Backhand, 2 = Heroic Thrust
+      this.comboTimer = 0;
+      this.parryFlash = 0;
     }
 
     get currentItem() {
@@ -152,6 +157,14 @@
       this.walkPhase = Math.random() * Math.PI * 2;
       this.attackAnim = 0;
       this.telegraphTimer = 0;
+      this.lungeTimer = 0;
+      this.attackCooldown = 0.6 + Math.random() * 0.6;
+      this.parryCooldown = 0;
+      this.armed =
+        type === 'soldier' ||
+        type === 'red_soldier' ||
+        type === 'stalfos' ||
+        type === 'knight';
 
       const scale = 1 + (playerCount - 1) * 0.35;
 

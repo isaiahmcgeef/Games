@@ -411,6 +411,13 @@
       if (hero.itemCooldown > 0) hero.itemCooldown -= dt;
       if (hero.itemAnimTimer > 0) hero.itemAnimTimer -= dt;
       if (hero.celebrateTimer > 0) hero.celebrateTimer -= dt;
+      if (hero.parryFlash > 0) hero.parryFlash -= dt;
+      if (hero.comboTimer > 0) {
+        hero.comboTimer -= dt;
+        if (hero.comboTimer <= 0) {
+          hero.comboStep = 0;
+        }
+      }
 
       // Decay Pegasus Roll afterimages
       if (hero.afterimages && hero.afterimages.length > 0) {
@@ -590,9 +597,10 @@
         clone.moving = false;
       }
 
-      // Mirror leader sword swings!
+      // Mirror leader sword swings & combo step!
       if (leader.swordTimer > FB.CONFIG.SWORD_DURATION - 0.03 && clone.swordTimer <= 0) {
         clone.dir = leader.dir;
+        clone.comboStep = leader.comboStep;
         clone.swordTimer = FB.CONFIG.SWORD_DURATION;
         clone.swordHitSet = new Set();
       }
@@ -633,10 +641,24 @@
     }
 
     startSwordSwing(hero) {
+      if (hero.comboTimer > 0) {
+        hero.comboStep = (hero.comboStep + 1) % 3;
+      } else {
+        hero.comboStep = 0;
+      }
+      hero.comboTimer = FB.CONFIG.SWORD_COMBO_WINDOW;
       hero.swordTimer = FB.CONFIG.SWORD_DURATION;
-      hero.swordCooldown = 0.23;
+      hero.swordCooldown = FB.CONFIG.SWORD_COOLDOWN;
       hero.swordHitSet = new Set();
-      FB.audio.play('sword');
+
+      const sfx = hero.comboStep === 2 ? 'sword3' : hero.comboStep === 1 ? 'sword2' : 'sword';
+      FB.audio.play(sfx);
+
+      // Extra golden spark burst on Combo Hit 3 (Heroic Thrust Finisher!)
+      if (hero.comboStep === 2) {
+        const dv = FB.DIR_VEC[hero.dir] || FB.DIR_VEC[0];
+        this.spawnParticles(hero.x + dv.x * 16, hero.y + dv.y * 16, '#fde047', 6, 55, { shape: 'spark', life: 0.18 });
+      }
     }
 
     startSpinAttack(hero) {
@@ -1028,11 +1050,13 @@
     }
 
     checkSwordHits(hero, isSpin) {
-      const reach = isSpin ? 22 : 17;
+      const isFinisher = !isSpin && hero.comboStep === 2;
+      const reach = isSpin ? 22 : isFinisher ? 20 : 17;
       const dv = FB.DIR_VEC[hero.dir];
-      const cx = isSpin ? hero.x : hero.x + dv.x * 13;
-      const cy = isSpin ? hero.y : hero.y + dv.y * 13;
-      const dmg = isSpin ? 4 : hero.isClone ? 1 : 2;
+      const forwardOffset = isFinisher ? 16 : 13;
+      const cx = isSpin ? hero.x : hero.x + dv.x * forwardOffset;
+      const cy = isSpin ? hero.y : hero.y + dv.y * forwardOffset;
+      const dmg = isSpin ? 4 : hero.isClone ? 1 : isFinisher ? 3 : 2;
 
       // Hit tiles (Bushes, Pots, Crystal Switches)
       const minC = Math.max(0, Math.floor((cx - reach) / TS));
@@ -1069,7 +1093,7 @@
         }
       }
 
-      // Hit enemies (and boss orbiting orbs!)
+      // Hit enemies (and boss orbiting orbs!) + Sword/Spear Parrying & Clashing!
       for (const e of this.enemies) {
         if (!e.alive) continue;
 
@@ -1096,7 +1120,75 @@
 
         if (!hero.swordHitSet.has(e.id) && Math.hypot(e.x - cx, e.y - cy) < reach + e.w * 0.45) {
           hero.swordHitSet.add(e.id);
-          e.hit(dmg, hero.x, hero.y, hero.isClone ? this.humanHeroes[0] : hero, this);
+
+          // Check for Sword/Spear Parry or Blade Clash with armed foes!
+          if (!isSpin && !hero.isClone && e.armed && e.stunTimer <= 0) {
+            const edv = FB.DIR_VEC[e.dir] || FB.DIR_VEC[0];
+            const toHeroX = hero.x - e.x;
+            const toHeroY = hero.y - e.y;
+            const toHeroLen = Math.hypot(toHeroX, toHeroY) || 1;
+            const enemyFacingHero = (edv.x * toHeroX + edv.y * toHeroY) / toHeroLen > 0.35;
+
+            if (enemyFacingHero && (e.telegraphTimer > 0 || e.lungeTimer > 0)) {
+              // PERFECT PARRY! Deflects enemy's sword/spear lunge and leaves them wide open!
+              const mx = (hero.x + e.x) * 0.5;
+              const my = (hero.y + e.y) * 0.5;
+              const pushAng = Math.atan2(e.y - hero.y, e.x - hero.x);
+
+              e.telegraphTimer = 0;
+              e.lungeTimer = 0;
+              e.attackCooldown = 1.4;
+              e.parryCooldown = 1.2;
+              e.stunTimer = 1.7;
+              e.knockX = Math.cos(pushAng) * 165;
+              e.knockY = Math.sin(pushAng) * 165;
+              e.knockTimer = 0.16;
+
+              hero.invuln = Math.max(hero.invuln, 0.36);
+              hero.parryFlash = 0.4;
+              hero.swordCooldown = 0.08; // Instant counter-slash readiness!
+
+              FB.audio.play('parry');
+              this.hitstop = Math.max(this.hitstop, 0.075);
+              this.screenShake = Math.max(this.screenShake, 2.5);
+              this.spawnRing(mx, my, '#fde047', 22, 0.25);
+              this.spawnParticles(mx, my, '#ffffff', 8, 95, { shape: 'spark', life: 0.22 });
+              this.spawnParticles(mx, my, '#fde047', 6, 75, { shape: 'star', life: 0.28 });
+              this.addFloatingText(mx, my - 10, 'PARRY!', '#fde047');
+              continue;
+            } else if (enemyFacingHero && !isFinisher && e.parryCooldown <= 0) {
+              // BLADE CLASH (Parlay): Head-on sword-vs-spear/sword lock with sparks & recoil!
+              const mx = (hero.x + e.x) * 0.5;
+              const my = (hero.y + e.y) * 0.5;
+              const pushAng = Math.atan2(e.y - hero.y, e.x - hero.x);
+
+              e.parryCooldown = 0.95;
+              e.stunTimer = 0.32;
+              e.knockX = Math.cos(pushAng) * 110;
+              e.knockY = Math.sin(pushAng) * 110;
+              e.knockTimer = 0.11;
+
+              hero.knockX = -Math.cos(pushAng) * 65;
+              hero.knockY = -Math.sin(pushAng) * 65;
+              hero.knockTimer = 0.08;
+              hero.invuln = Math.max(hero.invuln, 0.22);
+
+              FB.audio.play('clash');
+              this.hitstop = Math.max(this.hitstop, 0.042);
+              this.spawnRing(mx, my, '#e2e8f0', 14, 0.18);
+              this.spawnParticles(mx, my, '#fef9c3', 7, 80, { shape: 'spark', life: 0.18 });
+              this.addFloatingText(mx, my - 9, 'CLASH!', '#e2e8f0');
+              continue;
+            }
+          }
+
+          // Bonus counter-hit damage when striking a stunned/parried enemy!
+          const bonus = e.stunTimer > 0 ? 1 : 0;
+          const dealt = dmg + bonus;
+          const hitOk = e.hit(dealt, hero.x, hero.y, hero.isClone ? this.humanHeroes[0] : hero, this);
+          if (hitOk && bonus > 0) {
+            this.spawnParticles(e.x, e.y, '#fde047', 6, 70, { shape: 'star', life: 0.22 });
+          }
         }
       }
 
@@ -1165,8 +1257,12 @@
       for (const e of this.enemies) {
         if (!e.alive) continue;
         if (e.hurtTimer > 0) e.hurtTimer -= dt;
+        if (e.parryCooldown > 0) e.parryCooldown -= dt;
+        if (e.attackCooldown > 0) e.attackCooldown -= dt;
         if (e.stunTimer > 0) {
           e.stunTimer -= dt;
+          e.telegraphTimer = 0;
+          e.lungeTimer = 0;
           continue;
         }
         e.walkPhase += dt * (e.type === 'red_soldier' ? 9.5 : 7.5);
@@ -1191,9 +1287,15 @@
           this.updateNormalEnemy(e, target, bestDist, dt);
         }
 
-        // Contact damage with heroes
+        // Contact damage with heroes (extended slightly during enemy weapon lunge!)
+        const hitDist = e.lungeTimer > 0 ? (e.w + 15) * 0.5 : (e.w + 10) * 0.45;
         for (const h of liveHeroes) {
-          if (Math.hypot(h.x - e.x, h.y - e.y) < (e.w + 10) * 0.45) {
+          if (Math.hypot(h.x - e.x, h.y - e.y) < hitDist) {
+            // If hero is mid-swing facing the lunging armed enemy, trigger auto-parry instead of unfair trade!
+            if (e.armed && e.lungeTimer > 0 && h.swordTimer > 0) {
+              this.checkSwordHits(h, false);
+              if (e.stunTimer > 0) continue;
+            }
             h.damage(e.damage, e.x, e.y, this);
           }
         }
@@ -1240,7 +1342,32 @@
         const ang = Math.atan2(target.y - e.y, target.x - e.x) + Math.sin(this.time * 5 + e.x) * 0.8;
         this.moveEnemy(e, Math.cos(ang) * e.speed * dt, Math.sin(ang) * e.speed * dt);
       } else {
-        // Soldier, Red Soldier, Stalfos, Armored Knight: chase when close, patrol otherwise
+        // Armed melee enemies (Soldier, Red Soldier, Stalfos, Armored Knight):
+        // Telegraph windup -> sharp weapon lunge (can be Parried!)
+        if (e.armed && e.telegraphTimer > 0) {
+          e.telegraphTimer -= dt;
+          const ang = Math.atan2(target.y - e.y, target.x - e.x);
+          if (Math.abs(Math.cos(ang)) > Math.abs(Math.sin(ang))) {
+            e.dir = Math.cos(ang) < 0 ? FB.DIRS.LEFT : FB.DIRS.RIGHT;
+          } else {
+            e.dir = Math.sin(ang) < 0 ? FB.DIRS.UP : FB.DIRS.DOWN;
+          }
+          if (e.telegraphTimer <= 0) {
+            e.lungeTimer = 0.2;
+            e.attackCooldown = e.type === 'red_soldier' ? 1.15 : 1.45;
+            FB.audio.play('sword');
+          }
+          return;
+        }
+
+        if (e.armed && e.lungeTimer > 0) {
+          e.lungeTimer -= dt;
+          const dv = FB.DIR_VEC[e.dir] || FB.DIR_VEC[0];
+          const lungeSpd = e.speed * 2.15;
+          this.moveEnemy(e, dv.x * lungeSpd * dt, dv.y * lungeSpd * dt);
+          return;
+        }
+
         if (dist < 135) {
           const ang = Math.atan2(target.y - e.y, target.x - e.x);
           const vx = Math.cos(ang) * e.speed;
@@ -1250,11 +1377,18 @@
           } else {
             e.dir = vy < 0 ? FB.DIRS.UP : FB.DIRS.DOWN;
           }
+
+          // Initiate parryable weapon telegraph when close!
+          if (e.armed && dist < 38 && e.attackCooldown <= 0) {
+            e.telegraphTimer = 0.36;
+            return;
+          }
+
           this.moveEnemy(e, vx * dt, vy * dt);
 
-          // Stalfos throws bones!
-          if (e.type === 'stalfos' && e.shootTimer <= 0) {
-            e.shootTimer = 2.2;
+          // Stalfos throws bones at mid-range!
+          if (e.type === 'stalfos' && dist > 42 && e.shootTimer <= 0) {
+            e.shootTimer = 2.4;
             this.projectiles.push(
               new FB.Projectile({
                 kind: 'bone',

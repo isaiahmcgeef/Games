@@ -114,11 +114,31 @@
 
       switch (sfx) {
         case 'sword':
-          this._noise(0, 0.09, 0.09, 2600);
-          this._tone(620, 0, 0.08, 'triangle', 0.08, 220);
+          this._noise(0, 0.065, 0.09, 2800);
+          this._tone(680, 0, 0.06, 'triangle', 0.08, 260);
+          break;
+        case 'sword2':
+          this._noise(0, 0.065, 0.09, 3200);
+          this._tone(820, 0, 0.06, 'triangle', 0.085, 340);
+          break;
+        case 'sword3':
+          this._noise(0, 0.09, 0.11, 2400);
+          this._tone(960, 0, 0.08, 'square', 0.065, 420);
+          this._tone(520, 0.02, 0.08, 'triangle', 0.07, 1080);
+          break;
+        case 'clash':
+          this._tone(1680, 0, 0.055, 'square', 0.075, 2350);
+          this._tone(1120, 0.015, 0.08, 'triangle', 0.07, 1500);
+          this._noise(0, 0.05, 0.09, 3600);
+          break;
+        case 'parry':
+          this._tone(1320, 0, 0.06, 'square', 0.085, 1980);
+          this._tone(1980, 0.03, 0.18, 'sine', 0.1, 2640);
+          this._tone(990, 0.02, 0.16, 'triangle', 0.085, 1480);
+          this._noise(0, 0.07, 0.11, 4200);
           break;
         case 'spin':
-          this._noise(0, 0.24, 0.12, 2200);
+          this._noise(0, 0.22, 0.12, 2200);
           this._tone(520, 0, 0.1, 'square', 0.07, 880);
           this._tone(720, 0.09, 0.15, 'square', 0.08, 360);
           break;
